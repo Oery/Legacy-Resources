@@ -62,4 +62,56 @@ final class FallbackModelGenerator {
 			+ "}}";
 		return json.getBytes(StandardCharsets.UTF_8);
 	}
+
+	/**
+	 * Torches (and redstone torches, wall-mounted or not) use vanilla's own thin billboard-style
+	 * template models ({@code template_torch}, {@code template_torch_wall},
+	 * {@code template_redstone_torch}, etc.) - never a full cube - keyed by a {@code "torch"}
+	 * texture variable rather than {@code "all"}. Legacy packs never ship these models, and a
+	 * plain {@code cube_all} fallback would render a solid block instead of a torch sprite.
+	 */
+	static byte[] torchModel(String namespace, String template, String textureStem) {
+		String json = "{\"parent\":\"minecraft:block/" + template + "\",\"textures\":{\"torch\":\"" + namespace + ":block/" + textureStem + "\"}}";
+		return json.getBytes(StandardCharsets.UTF_8);
+	}
+
+	/** Facing-aware blockstate matching vanilla's own wall_torch blockstate. */
+	static byte[] wallTorchBlockstate(String namespace, String blockStem) {
+		String model = namespace + ":block/" + blockStem;
+		String json = "{\"variants\":{"
+			+ "\"facing=east\":{\"model\":\"" + model + "\"},"
+			+ "\"facing=north\":{\"model\":\"" + model + "\",\"y\":270},"
+			+ "\"facing=south\":{\"model\":\"" + model + "\",\"y\":90},"
+			+ "\"facing=west\":{\"model\":\"" + model + "\",\"y\":180}"
+			+ "}}";
+		return json.getBytes(StandardCharsets.UTF_8);
+	}
+
+	/** Lit-aware blockstate matching vanilla's own redstone_torch blockstate. */
+	static byte[] litUnlitBlockstate(String namespace, String litStem, String unlitStem) {
+		String lit = namespace + ":block/" + litStem;
+		String unlit = namespace + ":block/" + unlitStem;
+		String json = "{\"variants\":{"
+			+ "\"lit=false\":{\"model\":\"" + unlit + "\"},"
+			+ "\"lit=true\":{\"model\":\"" + lit + "\"}"
+			+ "}}";
+		return json.getBytes(StandardCharsets.UTF_8);
+	}
+
+	/** Facing+lit-aware blockstate matching vanilla's own redstone_wall_torch blockstate. */
+	static byte[] wallLitUnlitBlockstate(String namespace, String litStem, String unlitStem) {
+		String lit = namespace + ":block/" + litStem;
+		String unlit = namespace + ":block/" + unlitStem;
+		String json = "{\"variants\":{"
+			+ "\"facing=east,lit=false\":{\"model\":\"" + unlit + "\"},"
+			+ "\"facing=east,lit=true\":{\"model\":\"" + lit + "\"},"
+			+ "\"facing=north,lit=false\":{\"model\":\"" + unlit + "\",\"y\":270},"
+			+ "\"facing=north,lit=true\":{\"model\":\"" + lit + "\",\"y\":270},"
+			+ "\"facing=south,lit=false\":{\"model\":\"" + unlit + "\",\"y\":90},"
+			+ "\"facing=south,lit=true\":{\"model\":\"" + lit + "\",\"y\":90},"
+			+ "\"facing=west,lit=false\":{\"model\":\"" + unlit + "\",\"y\":180},"
+			+ "\"facing=west,lit=true\":{\"model\":\"" + lit + "\",\"y\":180}"
+			+ "}}";
+		return json.getBytes(StandardCharsets.UTF_8);
+	}
 }

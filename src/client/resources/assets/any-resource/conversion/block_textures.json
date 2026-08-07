@@ -233,6 +233,8 @@
   "comparator": "comparator_off",
   "repeater": "repeater_off",
   "redstone_lamp": "redstone_lamp_off",
+  "torch": "torch_on",
+  "redstone_torch": "redstone_torch_on",
   "furnace_front": "furnace_front_off",
   "dispenser_front": "dispenser_front_horizontal",
   "dropper_front": "dropper_front_horizontal",

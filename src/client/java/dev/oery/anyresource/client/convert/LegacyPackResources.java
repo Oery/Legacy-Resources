@@ -56,6 +56,28 @@ public final class LegacyPackResources implements PackResources {
 	);
 	private static final String HORIZONTAL_SUFFIX = "_horizontal";
 	/**
+	 * Torch-family blocks use vanilla's own thin billboard template models (never a full cube),
+	 * keyed by a {@code "torch"} texture variable. Maps each block model stem to its vanilla
+	 * template parent and to the texture stem it actually renders with (wall variants reuse the
+	 * standing torch's texture; there's no separate {@code wall_torch.png}).
+	 */
+	private static final Map<String, String> TORCH_MODEL_TEMPLATES = Map.of(
+		"torch", "template_torch",
+		"wall_torch", "template_torch_wall",
+		"redstone_torch", "template_redstone_torch",
+		"redstone_torch_off", "template_torch_unlit",
+		"redstone_wall_torch", "template_redstone_torch_wall",
+		"redstone_wall_torch_off", "template_torch_wall_unlit"
+	);
+	private static final Map<String, String> TORCH_MODEL_TEXTURE_STEM = Map.of(
+		"torch", "torch",
+		"wall_torch", "torch",
+		"redstone_torch", "redstone_torch",
+		"redstone_torch_off", "redstone_torch_off",
+		"redstone_wall_torch", "redstone_torch",
+		"redstone_wall_torch_off", "redstone_torch_off"
+	);
+	/**
 	 * Entity textures that later gained biome/variant splits (e.g. cows: temperate/warm/cold,
 	 * mooshroom: red/brown) and moved off the single filename legacy packs know. Only the
 	 * variant matching the pre-split classic look is aliased - the others are new additions
@@ -243,6 +265,12 @@ public final class LegacyPackResources implements PackResources {
 			return rewritten;
 		}
 		String namespace = location.getNamespace();
+		if (TORCH_MODEL_TEMPLATES.containsKey(stem)) {
+			String textureStem = TORCH_MODEL_TEXTURE_STEM.get(stem);
+			return textureResolves(namespace, NEW_BLOCK_TEXTURE_DIR, textureStem)
+				? FallbackModelGenerator.torchModel(namespace, TORCH_MODEL_TEMPLATES.get(stem), textureStem)
+				: null;
+		}
 		if (LOG_STEMS.contains(stem) && textureResolves(namespace, NEW_BLOCK_TEXTURE_DIR, stem)) {
 			return FallbackModelGenerator.pillarModel(namespace, stem, stem + "_top", false);
 		}
@@ -281,13 +309,29 @@ public final class LegacyPackResources implements PackResources {
 			return rewritten;
 		}
 		String namespace = location.getNamespace();
-		Identifier modelLocation = Identifier.fromNamespaceAndPath(namespace, MODEL_BLOCK_DIR + stem + ".json");
-		if (resolveJson(modelLocation, () -> computeBlockModel(modelLocation, stem)) == null) {
+		if (stem.equals("redstone_torch") || stem.equals("redstone_wall_torch")) {
+			String unlitStem = stem + "_off";
+			if (!blockModelResolves(namespace, stem) || !blockModelResolves(namespace, unlitStem)) {
+				return null;
+			}
+			return stem.equals("redstone_wall_torch")
+				? FallbackModelGenerator.wallLitUnlitBlockstate(namespace, stem, unlitStem)
+				: FallbackModelGenerator.litUnlitBlockstate(namespace, stem, unlitStem);
+		}
+		if (!blockModelResolves(namespace, stem)) {
 			return null;
+		}
+		if (stem.equals("wall_torch")) {
+			return FallbackModelGenerator.wallTorchBlockstate(namespace, stem);
 		}
 		return LOG_STEMS.contains(stem)
 			? FallbackModelGenerator.pillarBlockstate(namespace, stem)
 			: FallbackModelGenerator.singleVariantBlockstate(namespace, stem);
+	}
+
+	private boolean blockModelResolves(String namespace, String stem) {
+		Identifier modelLocation = Identifier.fromNamespaceAndPath(namespace, MODEL_BLOCK_DIR + stem + ".json");
+		return resolveJson(modelLocation, () -> computeBlockModel(modelLocation, stem)) != null;
 	}
 
 	private byte @Nullable [] tryRewriteJson(Identifier location) {
