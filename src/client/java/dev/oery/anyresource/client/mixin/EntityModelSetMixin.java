@@ -13,12 +13,12 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
- * Legacy (pre-1.13) cow textures are 64x32 and were never painted with the muzzle/horn UV
- * regions the modern cow model added (which needs a 64x64 canvas) - baking them against that
- * model scrambles every UV coordinate (see {@link LegacyCowModel}). When a legacy pack supplies
- * the classic single-file {@code textures/entity/cow/cow.png} - a filename only such a pack
- * would ever provide, since vanilla no longer ships it - swap in the classic geometry instead.
- * Models are rebaked on every resource reload, so this stays in sync with pack changes/F3+T.
+ * Legacy (pre-1.13) cow textures are 64x32, but the modern cow model added a muzzle cube that
+ * needs a 64x64 canvas - baking a legacy texture against that model scrambles every UV
+ * coordinate (see {@link LegacyCowModel}). When a legacy pack supplies the classic single-file
+ * {@code textures/entity/cow/cow.png} - a filename only such a pack would ever provide, since
+ * vanilla no longer ships it - swap in the classic geometry instead. Models are rebaked on every
+ * resource reload, so this stays in sync with pack changes/F3+T.
  */
 @Mixin(EntityModelSet.class)
 public class EntityModelSetMixin {
