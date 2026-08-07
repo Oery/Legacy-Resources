@@ -83,6 +83,7 @@
   "stone_bricks": "stonebrick",
   "cracked_stone_bricks": "stonebrick_cracked",
   "mossy_stone_bricks": "stonebrick_mossy",
+  "mossy_cobblestone": "cobblestone_mossy",
   "chiseled_stone_bricks": "stonebrick_carved",
 
   "andesite": "stone_andesite",
