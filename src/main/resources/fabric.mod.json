@@ -1,0 +1,34 @@
+{
+	"schemaVersion": 1,
+	"id": "any-resource",
+	"version": "${version}",
+	"name": "Any Resource",
+	"description": "Lets legacy 1.6-1.12 resource packs load in modern Minecraft by converting their textures, models and blockstates on the fly.",
+	"authors": [
+		"oery"
+	],
+	"contact": {},
+	"license": "CC0-1.0",
+	"icon": "assets/any-resource/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			"dev.oery.anyresource.AnyResource"
+		],
+		"client": [
+			"dev.oery.anyresource.client.AnyResourceClient"
+		]
+	},
+	"mixins": [
+		{
+			"config": "any-resource.client.mixins.json",
+			"environment": "client"
+		}
+	],
+	"depends": {
+		"fabricloader": ">=0.19.3",
+		"minecraft": "~26.2",
+		"java": ">=25",
+		"fabric-api": "*"
+	}
+}
