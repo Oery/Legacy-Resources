@@ -30,6 +30,8 @@ We should generate textures for as many new items/blocks as possible, using old 
 - [x] Smooth stone slab texture
 - [x] Some packs have 1.7 textures for steve which are the wrong format, they should be converted to a 1.8 skin format first
 - [x] HUD (hearts, armor, food, air, XP/jump/boss bars, crosshair, hotbar, tab-list ping bars) — `icons.png`/`widgets.png` split into `gui/sprites/**`, see `reference/atlas-mappings.md` section 1
+- [x] Menu buttons and sliders — `widgets.png` split into `gui/sprites/widget/**`; needs the nine-slice `.mcmeta` served too, see section 1b
+- [x] Title screen logo — legacy stores it as two stacked halves, modern as one strip; same filename, so it has to be reassembled
 
 # Issue
 - [x] Some scaling is happening to block textures in some pack, causing all blocks to look blurry, including blocks using vanilla textures

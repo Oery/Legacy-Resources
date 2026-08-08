@@ -6,6 +6,7 @@ import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
 import dev.oery.anyresource.AnyResource;
 import java.awt.Graphics2D;
+import java.awt.RenderingHints;
 import java.awt.geom.AffineTransform;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
@@ -284,6 +285,7 @@ public final class LegacyPackResources implements PackResources {
 	private static final String GUI_SPRITE_DIR = "textures/gui/sprites/";
 	/** {@link #GUI_SPRITE_DIR} without its trailing slash, i.e. as {@link #listResources} sees it. */
 	private static final String GUI_SPRITE_ROOT = "textures/gui/sprites";
+	private static final String METADATA_SUFFIX = ".mcmeta";
 
 	private final PackResources delegate;
 	private final Map<Identifier, byte[]> jsonCache = new ConcurrentHashMap<>();
@@ -326,8 +328,21 @@ public final class LegacyPackResources implements PackResources {
 				return resolveJson(location, () -> computeCompassFrameTexture(compassFrame));
 			}
 		}
+		if (path.equals(LegacyGuiSprites.LOGO_PATH) || path.equals(LegacyGuiSprites.EASTER_EGG_LOGO_PATH)) {
+			boolean easterEgg = path.equals(LegacyGuiSprites.EASTER_EGG_LOGO_PATH);
+			return resolveJson(location, () -> computeTitleLogo(easterEgg));
+		}
 		if (path.startsWith(GUI_SPRITE_DIR)) {
 			String spriteName = path.substring(GUI_SPRITE_DIR.length());
+			String metadata = LegacyGuiSprites.SPRITE_METADATA.get(stripMetadataSuffix(spriteName));
+			// Nine-slice metadata has to be served by this pack too, not just the image - see
+			// LegacyGuiSprites.SPRITE_METADATA - but only once the image itself resolves, or a pack
+			// with no widgets.png would claim metadata for a sprite it isn't overriding.
+			if (metadata != null && spriteName.endsWith(METADATA_SUFFIX)) {
+				return guiSpriteResolves(location, stripMetadataSuffix(spriteName))
+					? resolveJson(location, () -> metadata.getBytes(StandardCharsets.UTF_8))
+					: null;
+			}
 			LegacyGuiSprites.SheetCrop crop = LegacyGuiSprites.SPRITES.get(spriteName);
 			// Unmapped GUI sprites (those with no 1.8.9 equivalent) fall through untouched, so
 			// they keep resolving to vanilla's own art.
@@ -511,8 +526,20 @@ public final class LegacyPackResources implements PackResources {
 				}
 				Identifier id = Identifier.fromNamespaceAndPath(namespace, path);
 				IoSupplier<InputStream> resource = getResource(PackType.CLIENT_RESOURCES, id);
-				if (resource != null) {
-					output.accept(id, resource);
+				if (resource == null) {
+					return;
+				}
+				output.accept(id, resource);
+				// The nine-slice metadata is picked up from the listing too, not fetched per sprite
+				// (FallbackResourceManager.listResources collects .mcmeta entries alongside the
+				// images), so announcing the image alone would still lose the scaling.
+				if (!LegacyGuiSprites.SPRITE_METADATA.containsKey(spriteName)) {
+					return;
+				}
+				Identifier metadataId = id.withPath(path + METADATA_SUFFIX);
+				IoSupplier<InputStream> metadata = getResource(PackType.CLIENT_RESOURCES, metadataId);
+				if (metadata != null) {
+					output.accept(metadataId, metadata);
 				}
 			});
 			// Deliberately no early return: a legacy pack has nothing of its own under this path
@@ -697,13 +724,8 @@ public final class LegacyPackResources implements PackResources {
 			return null;
 		}
 		int scale = sheet.getWidth() / LegacyGuiSprites.SHEET_BASE_SIZE;
-		int x = crop.u() * scale;
-		int y = crop.v() * scale;
-		int width = crop.w() * scale;
 		int height = crop.h() * scale;
-		if (x + width > sheet.getWidth() || y + height > sheet.getHeight()) {
-			return null;
-		}
+		int width = crop.totalWidth() * scale;
 		try {
 			BufferedImage out = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
 			// Deliberately a raw pixel copy rather than a Graphics2D blit like the chest/redstone
@@ -713,7 +735,12 @@ public final class LegacyPackResources implements PackResources {
 			// step or two. That is invisible on mostly-opaque art but not here: the hotbar and the
 			// boss bar, the two largest sprites in the table, are semi-transparent almost edge to
 			// edge, and this crop has to hand back the pack's own bytes untouched.
-			out.setRGB(0, 0, width, height, sheet.getRGB(x, y, width, height, null, 0, width), 0, width);
+			if (!copyCell(sheet, crop, scale, out, 0)) {
+				return null;
+			}
+			if (crop.second() != null && !copyCell(sheet, crop.second(), scale, out, crop.w() * scale)) {
+				return null;
+			}
 			if (spriteName.equals(LegacyGuiSprites.HOTBAR_SELECTION) && isRowBlank(out, height - scale, scale)) {
 				// See LegacyGuiSprites.HOTBAR_SELECTION: repeat the row above into the bottom row
 				// the pack never authored, so the selection box keeps a bottom edge.
@@ -727,6 +754,93 @@ public final class LegacyPackResources implements PackResources {
 			AnyResource.LOGGER.warn("Failed to crop GUI sprite {} in legacy pack {}", spriteName, location().id(), e);
 			return null;
 		}
+	}
+
+	private static String stripMetadataSuffix(String spriteName) {
+		return spriteName.endsWith(METADATA_SUFFIX)
+			? spriteName.substring(0, spriteName.length() - METADATA_SUFFIX.length())
+			: spriteName;
+	}
+
+	/** Whether this pack actually supplies {@code spriteName}, i.e. has the sheet it is cut from. */
+	private boolean guiSpriteResolves(Identifier location, String spriteName) {
+		LegacyGuiSprites.SheetCrop crop = LegacyGuiSprites.SPRITES.get(spriteName);
+		if (crop == null) {
+			return false;
+		}
+		Identifier spriteLocation = location.withPath(GUI_SPRITE_DIR + spriteName);
+		return resolveJson(spriteLocation, () -> computeGuiSprite(spriteName, crop)) != null;
+	}
+
+	/**
+	 * Reassembles the legacy title screen wordmark into the layout modern reads - see
+	 * {@link LegacyGuiSprites#LOGO_PATH} for why the file needs rebuilding rather than passing
+	 * through, and where the piece coordinates come from.
+	 */
+	private byte @Nullable [] computeTitleLogo(boolean easterEgg) {
+		BufferedImage sheet = loadSheet(LegacyGuiSprites.LOGO_PATH);
+		if (sheet == null
+			|| sheet.getWidth() != sheet.getHeight()
+			|| sheet.getWidth() % LegacyGuiSprites.SHEET_BASE_SIZE != 0) {
+			return null;
+		}
+		int scale = sheet.getWidth() / LegacyGuiSprites.SHEET_BASE_SIZE;
+		var pieces = easterEgg ? LegacyGuiSprites.EASTER_EGG_LOGO_PIECES : LegacyGuiSprites.LOGO_PIECES;
+		try {
+			// Lay the pieces out side by side exactly as 1.8.9's own draw calls do, then keep only
+			// the columns that hold artwork.
+			int stripWidth = LegacyGuiSprites.LOGO_LEGACY_WIDTH * scale;
+			int stripHeight = LegacyGuiSprites.LOGO_HEIGHT * scale;
+			BufferedImage strip = new BufferedImage(stripWidth, stripHeight, BufferedImage.TYPE_INT_ARGB);
+			Graphics2D sg = strip.createGraphics();
+			for (LegacyGuiSprites.LogoPiece piece : pieces) {
+				int width = Math.min(piece.w() * scale, stripWidth - piece.dx() * scale);
+				if (width <= 0) {
+					continue;
+				}
+				blit(sg, sheet, piece.u() * scale, piece.v() * scale, width, stripHeight, piece.dx() * scale, 0);
+			}
+			sg.dispose();
+
+			BufferedImage out = new BufferedImage(
+				LegacyGuiSprites.LOGO_CANVAS_WIDTH * scale, LegacyGuiSprites.LOGO_CANVAS_HEIGHT * scale,
+				BufferedImage.TYPE_INT_ARGB
+			);
+			Graphics2D g = out.createGraphics();
+			// The one place in this class that genuinely resamples: 274 columns of artwork have to
+			// display in a 256-wide slot whatever we do, so squeeze rather than crop. Nearest
+			// neighbour keeps the wordmark's hard pixel edges - the logo is chunky enough that the
+			// dropped columns don't read as distortion, confirmed against real packs.
+			g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+			g.drawImage(strip, 0, 0, LegacyGuiSprites.LOGO_CANVAS_WIDTH * scale, stripHeight, null);
+			g.dispose();
+			ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+			ImageIO.write(out, "png", bytes);
+			return bytes.toByteArray();
+		} catch (IOException e) {
+			AnyResource.LOGGER.warn("Failed to rebuild title logo in legacy pack {}", location().id(), e);
+			return null;
+		}
+	}
+
+	/**
+	 * Copies one {@link LegacyGuiSprites.SheetCrop} cell into {@code out} at horizontal offset
+	 * {@code dx}, or returns {@code false} if the cell doesn't fit inside the pack's sheet - a
+	 * region 1.8.9 could not have drawn from either, so the sprite is left to vanilla instead of
+	 * being filled with whatever happens to sit at the edge.
+	 */
+	private static boolean copyCell(
+		BufferedImage sheet, LegacyGuiSprites.SheetCrop crop, int scale, BufferedImage out, int dx
+	) {
+		int x = crop.u() * scale;
+		int y = crop.v() * scale;
+		int width = crop.w() * scale;
+		int height = crop.h() * scale;
+		if (x + width > sheet.getWidth() || y + height > sheet.getHeight()) {
+			return false;
+		}
+		out.setRGB(dx, 0, width, height, sheet.getRGB(x, y, width, height, null, 0, width), 0, width);
+		return true;
 	}
 
 	/** Whether the {@code height}-tall band of {@code image} starting at {@code y} is fully transparent. */

@@ -4,6 +4,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Where each modern {@code textures/gui/sprites/**} HUD sprite lives inside a legacy pack's two
@@ -77,8 +78,35 @@ final class LegacyGuiSprites {
 	private static final List<String> BOSS_BAR_COLORS =
 		List.of("pink", "blue", "red", "green", "yellow", "purple", "white");
 
+	private static final int BUTTON_WIDTH = 200;
+	private static final int BUTTON_HEIGHT = 20;
+	private static final int BUTTON_DISABLED_ROW = 46;
+	private static final int BUTTON_NORMAL_ROW = 66;
+	private static final int BUTTON_HOVERED_ROW = 86;
+	/** Width of each of the two button-edge slices 1.8.9 stitches into the slider knob. */
+	private static final int SLIDER_KNOB_HALF = 4;
+
 	/** Key: path relative to {@code textures/gui/sprites/}. */
 	static final Map<String, SheetCrop> SPRITES = build();
+
+	/**
+	 * Sprite metadata that has to travel with the sprite, keyed the same way as {@link #SPRITES}.
+	 * <p>
+	 * Modern stretches a GUI sprite to whatever size it is drawn at, unless a {@code .png.mcmeta}
+	 * declares nine-slice scaling - which is how a 200x20 button texture survives being drawn 98 or
+	 * 310 wide. Vanilla ships exactly such a file for each sprite below, but it does <em>not</em>
+	 * get applied to ours: {@code FallbackResourceManager.listResources} only honours metadata whose
+	 * pack sits at or above the pack supplying the image ({@code metaResource.packIndex >=
+	 * resource.packIndex}), and vanilla is always below a resource pack. So overriding the PNG alone
+	 * silently drops the nine-slice and stretches every non-200px-wide button. These copies of
+	 * vanilla's values are served and listed alongside the images to keep it.
+	 * <p>
+	 * The widths/heights here are the sprite's <em>nominal</em> size, independent of the pack's own
+	 * resolution, so they stay 200x20 even when the synthesized image is 400x40 or larger. Sprites
+	 * absent from this map (the lock icons, and every HUD sprite) have no vanilla {@code .mcmeta}
+	 * either, so plain stretch scaling is already correct for them.
+	 */
+	static final Map<String, String> SPRITE_METADATA = buildMetadata();
 
 	private LegacyGuiSprites() {
 	}
@@ -98,8 +126,24 @@ final class LegacyGuiSprites {
 		}
 	}
 
-	/** A cell of {@code sheet}, in 1.8.9's {@value #SHEET_BASE_SIZE}px sheet coordinates. */
-	record SheetCrop(Sheet sheet, int u, int v, int w, int h) {
+	/**
+	 * A cell of {@code sheet}, in 1.8.9's {@value #SHEET_BASE_SIZE}px sheet coordinates.
+	 * <p>
+	 * {@code second}, when present, is a further cell butted against the right edge of the first:
+	 * 1.8.9 had no nine-slice scaling, so where a widget needed to stretch it was drawn as two
+	 * separate blits of the sheet's left and right edges (buttons via
+	 * {@code GuiButton.java:68-69}, the slider knob via {@code GuiSlider.java:85-86}), and the
+	 * modern single sprite has to be stitched back together from both.
+	 */
+	record SheetCrop(Sheet sheet, int u, int v, int w, int h, @Nullable SheetCrop second) {
+		SheetCrop(Sheet sheet, int u, int v, int w, int h) {
+			this(sheet, u, v, w, h, null);
+		}
+
+		/** Total width of the stitched sprite. */
+		int totalWidth() {
+			return second == null ? w : w + second.w();
+		}
 	}
 
 	private static Map<String, SheetCrop> build() {
@@ -170,7 +214,77 @@ final class LegacyGuiSprites {
 		map.put("hud/hotbar.png", new SheetCrop(Sheet.WIDGETS, 0, 0, 182, 22));
 		map.put(HOTBAR_SELECTION, new SheetCrop(Sheet.WIDGETS, 0, 22, 24, 23));
 
+		putWidgets(map);
+
 		return Collections.unmodifiableMap(map);
+	}
+
+	/**
+	 * Menu widgets, all from {@code widgets.png}. {@code GuiButton.java:68} draws the button as
+	 * {@code 0, 46 + state * 20, 200, 20}, where the state is 0 when the button is disabled, 1
+	 * normally and 2 while hovered ({@code GuiButton.getHoverState}); the disabled and normal rows
+	 * are pixel-identical to modern's own {@code button_disabled}/{@code button} sprites, which
+	 * pins the mapping. The hovered row is not - 1.8.9 tinted the whole button blue where modern
+	 * draws a white outline instead - but it is unambiguously the same state, so a pack's hover art
+	 * lands where a pack author expects it.
+	 * <p>
+	 * The slider is the same texture wearing two hats: {@code GuiSlider.getHoverState} is
+	 * hardcoded to 0, so its track is always the *disabled* button row, and its 8x20 knob is
+	 * stitched from the leftmost and rightmost 4px of the *normal* row
+	 * ({@code GuiSlider.java:85-86}). 1.8.9 had no focused-slider state, so modern's
+	 * {@code _highlighted} variants reuse the same art rather than falling back to vanilla's and
+	 * flickering between two styles.
+	 */
+	private static void putWidgets(Map<String, SheetCrop> map) {
+		map.put("widget/button.png", button(BUTTON_NORMAL_ROW));
+		map.put("widget/button_highlighted.png", button(BUTTON_HOVERED_ROW));
+		map.put("widget/button_disabled.png", button(BUTTON_DISABLED_ROW));
+
+		map.put("widget/slider.png", button(BUTTON_DISABLED_ROW));
+		map.put("widget/slider_highlighted.png", button(BUTTON_DISABLED_ROW));
+		SheetCrop knob = new SheetCrop(
+			Sheet.WIDGETS, 0, BUTTON_NORMAL_ROW, SLIDER_KNOB_HALF, BUTTON_HEIGHT,
+			new SheetCrop(Sheet.WIDGETS, BUTTON_WIDTH - SLIDER_KNOB_HALF, BUTTON_NORMAL_ROW, SLIDER_KNOB_HALF, BUTTON_HEIGHT)
+		);
+		map.put("widget/slider_handle.png", knob);
+		map.put("widget/slider_handle_highlighted.png", knob);
+
+		// The world-options difficulty lock, a 2x3 block of 20x20 icons per
+		// GuiLockIconButton.Icon's (u, v) pairs.
+		map.put("widget/locked_button.png", lockIcon(0, 146));
+		map.put("widget/locked_button_highlighted.png", lockIcon(0, 166));
+		map.put("widget/locked_button_disabled.png", lockIcon(0, 186));
+		map.put("widget/unlocked_button.png", lockIcon(20, 146));
+		map.put("widget/unlocked_button_highlighted.png", lockIcon(20, 166));
+		map.put("widget/unlocked_button_disabled.png", lockIcon(20, 186));
+	}
+
+	/** See {@link #SPRITE_METADATA}; values copied from 26.2's own {@code widget/*.png.mcmeta}. */
+	private static Map<String, String> buildMetadata() {
+		Map<String, String> map = new LinkedHashMap<>();
+		map.put("widget/button.png", nineSlice(BUTTON_WIDTH, BUTTON_HEIGHT, 3));
+		map.put("widget/button_highlighted.png", nineSlice(BUTTON_WIDTH, BUTTON_HEIGHT, 3));
+		map.put("widget/button_disabled.png", nineSlice(BUTTON_WIDTH, BUTTON_HEIGHT, 1));
+		map.put("widget/slider.png", nineSlice(BUTTON_WIDTH, BUTTON_HEIGHT, 1));
+		map.put("widget/slider_highlighted.png", nineSlice(BUTTON_WIDTH, BUTTON_HEIGHT, 1));
+		String knob = "{\"gui\":{\"scaling\":{\"type\":\"nine_slice\",\"width\":8,\"height\":20,"
+			+ "\"border\":{\"left\":2,\"top\":2,\"right\":2,\"bottom\":3}}}}";
+		map.put("widget/slider_handle.png", knob);
+		map.put("widget/slider_handle_highlighted.png", knob);
+		return Collections.unmodifiableMap(map);
+	}
+
+	private static String nineSlice(int width, int height, int border) {
+		return "{\"gui\":{\"scaling\":{\"type\":\"nine_slice\",\"width\":" + width
+			+ ",\"height\":" + height + ",\"border\":" + border + "}}}";
+	}
+
+	private static SheetCrop button(int v) {
+		return new SheetCrop(Sheet.WIDGETS, 0, v, BUTTON_WIDTH, BUTTON_HEIGHT);
+	}
+
+	private static SheetCrop lockIcon(int u, int v) {
+		return new SheetCrop(Sheet.WIDGETS, u, v, 20, 20);
 	}
 
 	/**
@@ -222,4 +336,59 @@ final class LegacyGuiSprites {
 	private static SheetCrop icons(int u, int v, int w, int h) {
 		return new SheetCrop(Sheet.ICONS, u, v, w, h);
 	}
+
+	/**
+	 * The title screen logo, which needs relaying rather than cropping - and unlike everything
+	 * above is a plain texture, not an atlas sprite, so {@link LegacyPackResources} only has to
+	 * intercept {@code getResource} for it.
+	 * <p>
+	 * Both versions call the file {@code textures/gui/title/minecraft.png}, which is exactly why it
+	 * renders wrong today: the legacy file passes straight through and modern reads a completely
+	 * different layout out of it. 1.8.9 stores the wordmark as two stacked 155x44 rows - at (0,0)
+	 * and (0,45) of a square sheet - and draws them side by side ({@code GuiMainMenu.java:437-438}),
+	 * so the logo only exists as a 310-wide strip once assembled. Modern instead blits a single
+	 * {@code (0,0,256,44)} region out of a nominally 256x64 texture
+	 * ({@code LogoRenderer.extractRenderState}), so what the game currently shows is the top-left
+	 * corner of the legacy sheet: the first half of the wordmark, and nothing else.
+	 * <p>
+	 * The two canvases also disagree on width. 1.8.9's own {@code i = 274} centering constant says
+	 * the artwork occupies 274 of those 310 columns (the remainder is padding), and measuring all
+	 * 57 real packs that ship a logo confirms it - none paints beyond 274. Modern's slot is 256
+	 * wide. So the assembled 274x44 artwork is fitted onto the 256x44 slot, which costs a 6.6%
+	 * horizontal squeeze; the alternative, preserving the aspect ratio by letterboxing it to
+	 * 256x41, leaves the logo visibly smaller than every other pack's and than vanilla's own.
+	 */
+	static final String LOGO_PATH = "textures/gui/title/minecraft.png";
+	/** Modern's easter-egg logo, a 1-in-10000 roll in {@code LogoRenderer}. */
+	static final String EASTER_EGG_LOGO_PATH = "textures/gui/title/minceraft.png";
+	/** Width of the assembled legacy strip that actually holds artwork; see {@link #LOGO_PATH}. */
+	static final int LOGO_LEGACY_WIDTH = 274;
+	/** Nominal canvas modern reads the logo out of, and the region of it that gets drawn. */
+	static final int LOGO_CANVAS_WIDTH = 256;
+	static final int LOGO_CANVAS_HEIGHT = 64;
+	static final int LOGO_HEIGHT = 44;
+
+	/** A piece of the legacy logo sheet, copied to {@code dx} in the assembled strip. */
+	record LogoPiece(int u, int v, int w, int dx) {
+	}
+
+	/** {@code GuiMainMenu.java:437-438} - the plain wordmark, two rows laid side by side. */
+	static final List<LogoPiece> LOGO_PIECES = List.of(
+		new LogoPiece(0, 0, 155, 0),
+		new LogoPiece(0, 45, 155, 155)
+	);
+
+	/**
+	 * {@code GuiMainMenu.java:431-435} - the "MINCERAFT" easter egg, which 1.8.9 produced by
+	 * re-cutting the same sheet rather than shipping a second file (modern gave it its own
+	 * {@link #EASTER_EGG_LOGO_PATH}). Reproduced piece for piece, including vanilla's own 1px
+	 * overlap between the third and fourth blits, so a legacy pack's art keeps the joke.
+	 */
+	static final List<LogoPiece> EASTER_EGG_LOGO_PIECES = List.of(
+		new LogoPiece(0, 0, 99, 0),
+		new LogoPiece(129, 0, 27, 99),
+		new LogoPiece(126, 0, 3, 125),
+		new LogoPiece(99, 0, 26, 128),
+		new LogoPiece(0, 45, 155, 155)
+	);
 }
