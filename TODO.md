@@ -26,8 +26,9 @@ We should generate textures for as many new items/blocks as possible, using old 
 - [x] Books / Enchanted Books / Book and quill
 - [x] Bone meal (i think it became a dye instead)
 - [x] Fire Charges
-- [ ] Compass
-- [ ] Smooth stone slab texture
+- [x] Compass
+- [x] Smooth stone slab texture
+- [x] Some packs have 1.7 textures for steve which are the wrong format, they should be converted to a 1.8 skin format first
 
 # Issue
 - [x] Some scaling is happening to block textures in some pack, causing all blocks to look blurry, including blocks using vanilla textures

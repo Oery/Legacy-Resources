@@ -98,6 +98,9 @@
   "redstone_dust_dot": "redstone_dust_cross",
   "redstone_dust_overlay": "redstone_dust_line_overlay",
 
+  "smooth_stone": "stone_slab_top",
+  "smooth_stone_slab_side": "stone_slab_side",
+
   "andesite": "stone_andesite",
   "polished_andesite": "stone_andesite_smooth",
   "diorite": "stone_diorite",

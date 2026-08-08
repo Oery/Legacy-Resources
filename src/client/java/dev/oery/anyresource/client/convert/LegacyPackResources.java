@@ -131,6 +131,23 @@ public final class LegacyPackResources implements PackResources {
 		"textures/entity/player/slim/steve.png", "textures/entity/steve.png"
 	);
 	/**
+	 * The single alias target above (also this mod's oldest supported format) whose art can
+	 * predate even 1.6.1's own skin format: pre-1.8 skins were 64x32 (no distinct back-of-limb or
+	 * hat/jacket/sleeve/pants overlay regions - those pixels didn't exist yet), while every player
+	 * model since 1.8 samples a 64x64 layout. A legacy pack that still ships a 64x32
+	 * {@code steve.png} (some do - it predates this mod's 1.6.1-1.12.2 pack_format floor and
+	 * apparently still circulates) would otherwise render with those regions reading whatever
+	 * happens to sit past the old image's actual bounds - vanilla itself only performs this same
+	 * 64x32-to-64x64 upgrade for skins fetched over HTTP ({@code SkinTextureDownloader
+	 * .processLegacySkin}, {@code reference/26.2}), never for a texture a resource pack serves
+	 * directly, so this mod has to replicate it. {@link #upgradeLegacySkin} mirrors that method's
+	 * exact sequence of mirrored-copy regions (verified against its decompiled source line for
+	 * line) - just not its separate, unrelated alpha-stripping calls, which exist to sanitize
+	 * skins submitted to Mojang's session service against a griefing exploit, not to fix the
+	 * format, and would risk clobbering intentional transparency in a legacy pack's own art.
+	 */
+	private static final String STEVE_TEXTURE_PATH = "textures/entity/steve.png";
+	/**
 	 * Pre-1.13 Minecraft rendered the fishing bobber by cropping a fixed icon cell out of the
 	 * shared particle sheet, rather than using its own texture file. The modern renderer always
 	 * loads a dedicated {@link #FISHING_HOOK_TEXTURE_PATH} and never reads the particle sheet, so
@@ -139,6 +156,24 @@ public final class LegacyPackResources implements PackResources {
 	 * cell (column 1, row 2 of a 16x16 grid) was confirmed empirically: two independently drawn
 	 * legacy packs both have a fishhook-shaped icon at that exact cell.
 	 */
+	/**
+	 * 1.8.9 renders the compass needle by picking a frame directly out of a single animated
+	 * strip texture ({@code textures/items/compass.png}, a square-frame vertical strip like
+	 * {@code fire_layer_0.png} or {@code water_still.png}), sized to however many frames the
+	 * pack's own art actually has - {@link net.minecraft.client.renderer.texture.TextureAtlasSprite}'s
+	 * frame count, not a fixed constant (confirmed against {@code TextureCompass.updateCompass}
+	 * in {@code reference/1.8.9}). Modern Minecraft dropped per-sprite frame animation for items
+	 * entirely: the compass is now a data-driven {@code minecraft:range_dispatch} item model
+	 * (see {@code items/compass.json}) hardcoded to exactly 32 buckets, each pointing at its own
+	 * standalone sprite ({@code item/compass_00.png} .. {@code item/compass_31.png}). A legacy
+	 * pack's single strip therefore needs splitting into 32 individual textures rather than
+	 * renamed/aliased like every other texture in this mod - and since a pack's own frame count
+	 * need not be 32 (e.g. a real HD pack observed shipping 64), each modern bucket resamples the
+	 * nearest legacy frame proportionally rather than assuming a 1:1 frame mapping.
+	 */
+	private static final String LEGACY_COMPASS_TEXTURE_PATH = "textures/items/compass.png";
+	private static final String COMPASS_FRAME_STEM_PREFIX = "compass_";
+	private static final int COMPASS_MODERN_FRAME_COUNT = 32;
 	private static final String FISHING_HOOK_TEXTURE_PATH = "textures/entity/fishing/fishing_hook.png";
 	private static final String PARTICLE_ATLAS_PATH = "textures/particle/particles.png";
 	private static final int PARTICLE_ATLAS_GRID = 16;
@@ -269,6 +304,12 @@ public final class LegacyPackResources implements PackResources {
 		if (path.equals(REDSTONE_DUST_DOT_TEXTURE_PATH)) {
 			return resolveJson(location, () -> computeRedstoneDustDotTexture(location));
 		}
+		if (path.startsWith(NEW_ITEM_TEXTURE_DIR)) {
+			Integer compassFrame = parseCompassFrameIndex(path.substring(NEW_ITEM_TEXTURE_DIR.length()));
+			if (compassFrame != null) {
+				return resolveJson(location, () -> computeCompassFrameTexture(location, compassFrame));
+			}
+		}
 		if (path.startsWith(NEW_BLOCK_TEXTURE_DIR) || path.startsWith(NEW_ITEM_TEXTURE_DIR)) {
 			return resolveTexture(location, path);
 		}
@@ -276,7 +317,11 @@ public final class LegacyPackResources implements PackResources {
 			return resolveEquipmentTexture(location, path);
 		}
 		if (ENTITY_TEXTURE_ALIASES.containsKey(path)) {
-			return delegate.getResource(PackType.CLIENT_RESOURCES, location.withPath(ENTITY_TEXTURE_ALIASES.get(path)));
+			String aliasPath = ENTITY_TEXTURE_ALIASES.get(path);
+			if (aliasPath.equals(STEVE_TEXTURE_PATH)) {
+				return resolveJson(location, () -> computeSteveSkinTexture(location));
+			}
+			return delegate.getResource(PackType.CLIENT_RESOURCES, location.withPath(aliasPath));
 		}
 		if (path.equals(FISHING_HOOK_TEXTURE_PATH)) {
 			return resolveJson(location, () -> computeFishingHookTexture(location));
@@ -362,6 +407,18 @@ public final class LegacyPackResources implements PackResources {
 					output.accept(newId, supplier);
 				}
 			});
+			// item/compass_00..31 are standalone sprites with no legacy-pack file of their own
+			// (see LEGACY_COMPASS_TEXTURE_PATH's javadoc) - like the redstone dust textures above,
+			// nothing would ever list them unless explicitly announced here.
+			if (namespace.equals("minecraft") && compassSourceExists()) {
+				for (int frame = 0; frame < COMPASS_MODERN_FRAME_COUNT; frame++) {
+					Identifier id = Identifier.fromNamespaceAndPath(namespace, NEW_ITEM_TEXTURE_DIR + compassFrameStem(frame) + ".png");
+					IoSupplier<InputStream> resource = getResource(PackType.CLIENT_RESOURCES, id);
+					if (resource != null) {
+						output.accept(id, resource);
+					}
+				}
+			}
 			return;
 		}
 		if (namespace.equals("minecraft") && directoryCovers(directory, "models/block") && redstoneDustLineSourceExists()) {
@@ -473,6 +530,82 @@ public final class LegacyPackResources implements PackResources {
 			return null;
 		}
 		return delegate.getResource(PackType.CLIENT_RESOURCES, location.withPath(oldPath));
+	}
+
+	/**
+	 * See {@link #STEVE_TEXTURE_PATH}: serves the legacy pack's {@code steve.png} unchanged if it's
+	 * already 64x64-family, or upgraded via {@link #upgradeLegacySkin} if it's the older 64x32-family
+	 * (width exactly double the height - the same check {@code SkinTextureDownloader
+	 * .processLegacySkin} makes) shape.
+	 */
+	private byte @Nullable [] computeSteveSkinTexture(Identifier location) {
+		IoSupplier<InputStream> supplier = delegate.getResource(PackType.CLIENT_RESOURCES, location.withPath(STEVE_TEXTURE_PATH));
+		if (supplier == null) {
+			return null;
+		}
+		try (InputStream in = supplier.get()) {
+			BufferedImage source = ImageIO.read(in);
+			if (source == null) {
+				return null;
+			}
+			BufferedImage out = source.getWidth() == source.getHeight() * 2 ? upgradeLegacySkin(source) : source;
+			ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+			ImageIO.write(out, "png", bytes);
+			return bytes.toByteArray();
+		} catch (IOException e) {
+			AnyResource.LOGGER.warn("Failed to convert legacy steve skin texture in legacy pack {}", location().id(), e);
+			return null;
+		}
+	}
+
+	/**
+	 * Replicates {@code SkinTextureDownloader.processLegacySkin}'s 64x32-to-64x64 upgrade
+	 * (mirrored-copy region for region, scaled to the source's own resolution) - see
+	 * {@link #STEVE_TEXTURE_PATH}'s javadoc for why this mod can't just call that method directly.
+	 */
+	private static BufferedImage upgradeLegacySkin(BufferedImage source) {
+		int scale = source.getWidth() / 64;
+		int size = source.getWidth();
+		BufferedImage out = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
+		Graphics2D g = out.createGraphics();
+		g.drawImage(source, 0, 0, null);
+		g.dispose();
+		copyMirroredX(out, 4, 16, 16, 32, 4, 4, scale);
+		copyMirroredX(out, 8, 16, 16, 32, 4, 4, scale);
+		copyMirroredX(out, 0, 20, 24, 32, 4, 12, scale);
+		copyMirroredX(out, 4, 20, 16, 32, 4, 12, scale);
+		copyMirroredX(out, 8, 20, 8, 32, 4, 12, scale);
+		copyMirroredX(out, 12, 20, 16, 32, 4, 12, scale);
+		copyMirroredX(out, 44, 16, -8, 32, 4, 4, scale);
+		copyMirroredX(out, 48, 16, -8, 32, 4, 4, scale);
+		copyMirroredX(out, 40, 20, 0, 32, 4, 12, scale);
+		copyMirroredX(out, 44, 20, -8, 32, 4, 12, scale);
+		copyMirroredX(out, 48, 20, -16, 32, 4, 12, scale);
+		copyMirroredX(out, 52, 20, -8, 32, 4, 12, scale);
+		return out;
+	}
+
+	/**
+	 * Copies a {@code sizeX}x{@code sizeY} (in vanilla 1.8.9 64x32-skin units, scaled by {@code
+	 * scale} for HD packs) block starting at {@code (startX, startY)} to a position offset by
+	 * {@code (offsetX, offsetY)} from that same start, mirrored horizontally - matching {@code
+	 * NativeImage.copyRect(startX, startY, offsetX, offsetY, sizeX, sizeY, true, false)}.
+	 */
+	private static void copyMirroredX(BufferedImage image, int startX, int startY, int offsetX, int offsetY, int sizeX, int sizeY, int scale) {
+		int sx = startX * scale;
+		int sy = startY * scale;
+		int w = sizeX * scale;
+		int h = sizeY * scale;
+		int dx = sx + offsetX * scale;
+		int dy = sy + offsetY * scale;
+		int[] block = image.getRGB(sx, sy, w, h, null, 0, w);
+		int[] mirrored = new int[block.length];
+		for (int y = 0; y < h; y++) {
+			for (int x = 0; x < w; x++) {
+				mirrored[y * w + (w - 1 - x)] = block[y * w + x];
+			}
+		}
+		image.setRGB(dx, dy, w, h, mirrored, 0, w);
 	}
 
 	private byte @Nullable [] computeFishingHookTexture(Identifier location) {
@@ -919,6 +1052,64 @@ public final class LegacyPackResources implements PackResources {
 				throw new IOException("Failed to convert " + id + " in legacy pack " + location().id(), e);
 			}
 		};
+	}
+
+	private boolean compassSourceExists() {
+		return delegate.getResource(
+			PackType.CLIENT_RESOURCES, Identifier.fromNamespaceAndPath("minecraft", LEGACY_COMPASS_TEXTURE_PATH)
+		) != null;
+	}
+
+	private static String compassFrameStem(int frame) {
+		return COMPASS_FRAME_STEM_PREFIX + (frame < 10 ? "0" + frame : Integer.toString(frame));
+	}
+
+	/** Returns the frame index for {@code item/compass_NN.png}, or {@code null} if the stem doesn't match. */
+	private static @Nullable Integer parseCompassFrameIndex(String stemWithExtension) {
+		if (!stemWithExtension.startsWith(COMPASS_FRAME_STEM_PREFIX) || !stemWithExtension.endsWith(".png")) {
+			return null;
+		}
+		String digits = stemWithExtension.substring(
+			COMPASS_FRAME_STEM_PREFIX.length(), stemWithExtension.length() - ".png".length()
+		);
+		if (digits.length() != 2 || !Character.isDigit(digits.charAt(0)) || !Character.isDigit(digits.charAt(1))) {
+			return null;
+		}
+		return Integer.parseInt(digits);
+	}
+
+	/**
+	 * See {@link #LEGACY_COMPASS_TEXTURE_PATH}: crops the single legacy needle frame matching
+	 * {@code modernFrame} out of the pack's own animated strip, resampling proportionally by the
+	 * pack's actual frame count (its height divided by its own square frame width) rather than
+	 * assuming the strip has exactly 32 frames like modern's own fixed bucket count.
+	 */
+	private byte @Nullable [] computeCompassFrameTexture(Identifier location, int modernFrame) {
+		IoSupplier<InputStream> supplier = delegate.getResource(
+			PackType.CLIENT_RESOURCES, location.withPath(LEGACY_COMPASS_TEXTURE_PATH)
+		);
+		if (supplier == null) {
+			return null;
+		}
+		try (InputStream in = supplier.get()) {
+			BufferedImage source = ImageIO.read(in);
+			if (source == null || source.getWidth() <= 0 || source.getHeight() % source.getWidth() != 0) {
+				return null;
+			}
+			int frameSize = source.getWidth();
+			int legacyFrameCount = source.getHeight() / frameSize;
+			if (legacyFrameCount <= 0) {
+				return null;
+			}
+			int legacyFrame = modernFrame * legacyFrameCount / COMPASS_MODERN_FRAME_COUNT;
+			BufferedImage frame = source.getSubimage(0, legacyFrame * frameSize, frameSize, frameSize);
+			ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+			ImageIO.write(frame, "png", bytes);
+			return bytes.toByteArray();
+		} catch (IOException e) {
+			AnyResource.LOGGER.warn("Failed to synthesize compass frame {} in legacy pack {}", modernFrame, location().id(), e);
+			return null;
+		}
 	}
 
 	/**
