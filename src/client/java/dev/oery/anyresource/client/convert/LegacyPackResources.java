@@ -5,6 +5,9 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
 import dev.oery.anyresource.AnyResource;
+import dev.oery.anyresource.client.derive.Derivation;
+import dev.oery.anyresource.client.derive.Derivations;
+import dev.oery.anyresource.client.derive.Params;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.geom.AffineTransform;
@@ -16,6 +19,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -47,6 +51,8 @@ import org.jspecify.annotations.Nullable;
 public final class LegacyPackResources implements PackResources {
 	private static final Gson GSON = new Gson();
 
+	/** Prefix a {@link Derivation}'s texture paths are relative to. */
+	private static final String TEXTURE_DIR = "textures/";
 	private static final String NEW_BLOCK_TEXTURE_DIR = "textures/block/";
 	private static final String OLD_BLOCK_TEXTURE_DIR = "textures/blocks/";
 	private static final String NEW_ITEM_TEXTURE_DIR = "textures/item/";
@@ -295,6 +301,19 @@ public final class LegacyPackResources implements PackResources {
 	 * frames. Without this, each one re-decodes the whole PNG.
 	 */
 	private final Map<String, Optional<BufferedImage>> sheetCache = new ConcurrentHashMap<>();
+	/**
+	 * Derived textures ({@link Derivations}), keyed by derivation id, then by the texture path each
+	 * one produces. Cached per derivation rather than per texture because one run produces the whole
+	 * set at once - the netherite armour derivation reads seven sources to write seven textures, and
+	 * the game asks for those seven separately.
+	 */
+	private final Map<String, Map<String, byte[]>> derivedCache = new ConcurrentHashMap<>();
+	/**
+	 * Derivations currently being computed on this thread, so one that (mis)declares its own output
+	 * as a source cannot recurse forever. Not a {@link ConcurrentHashMap} guard: the cycle would be
+	 * within a single {@link #getResource} call chain, i.e. on one thread.
+	 */
+	private final ThreadLocal<Set<String>> deriving = ThreadLocal.withInitial(HashSet::new);
 
 	LegacyPackResources(PackResources delegate) {
 		this.delegate = delegate;
@@ -350,11 +369,16 @@ public final class LegacyPackResources implements PackResources {
 				return resolveJson(location, () -> computeGuiSprite(spriteName, crop));
 			}
 		}
+		// Derivation is the last resort in each of these branches, reached only once the pack has been
+		// found to have nothing of its own that maps to the requested texture - a pack that ships the
+		// file is never second-guessed.
 		if (path.startsWith(NEW_BLOCK_TEXTURE_DIR) || path.startsWith(NEW_ITEM_TEXTURE_DIR)) {
-			return resolveTexture(location, path);
+			IoSupplier<InputStream> texture = resolveTexture(location, path);
+			return texture != null ? texture : resolveDerivedTexture(path);
 		}
 		if (path.startsWith(NEW_EQUIPMENT_TEXTURE_DIR)) {
-			return resolveEquipmentTexture(location, path);
+			IoSupplier<InputStream> texture = resolveEquipmentTexture(location, path);
+			return texture != null ? texture : resolveDerivedTexture(path);
 		}
 		if (ENTITY_TEXTURE_ALIASES.containsKey(path)) {
 			String aliasPath = ENTITY_TEXTURE_ALIASES.get(path);
@@ -437,6 +461,7 @@ public final class LegacyPackResources implements PackResources {
 				}
 				output.accept(newId, supplier);
 			});
+			announceDerivedTextures(namespace, "block/", output);
 			return;
 		}
 		if (isOrUnder(directory, "textures/item")) {
@@ -459,6 +484,7 @@ public final class LegacyPackResources implements PackResources {
 					}
 				}
 			}
+			announceDerivedTextures(namespace, "item/", output);
 			return;
 		}
 		if (namespace.equals("minecraft") && directoryCovers(directory, "models/block") && redstoneDustLineSourceExists()) {
@@ -600,6 +626,140 @@ public final class LegacyPackResources implements PackResources {
 			return null;
 		}
 		return delegate.getResource(PackType.CLIENT_RESOURCES, location.withPath(oldPath));
+	}
+
+	/**
+	 * Synthesizes a texture the pack has no art for out of art it does have - see {@link Derivations}.
+	 * <p>
+	 * Modern Minecraft has a decade of blocks and items that no pre-flattening pack could have
+	 * covered, and for many of them a close relative is right there in the pack: suspicious gravel is
+	 * gravel that has been dug into, netherite armour is diamond armour in a different metal. Left
+	 * alone these fall back to vanilla's own art and sit in the world as obvious foreign objects among
+	 * hundreds of restyled neighbours, which is worse than an approximation drawn from the pack's own
+	 * palette.
+	 * <p>
+	 * The constants each derivation runs on are tuned in the derivation lab ({@code ./gradlew runLab},
+	 * see {@code src/lab}), which drives exactly this code path against every legacy pack at once.
+	 *
+	 * @param path full modern texture path, e.g. {@code textures/block/suspicious_gravel_0.png}
+	 */
+	private @Nullable IoSupplier<InputStream> resolveDerivedTexture(String path) {
+		if (!path.endsWith(".png")) {
+			return null;
+		}
+		byte[] bytes = derivedTexture(path.substring(TEXTURE_DIR.length(), path.length() - ".png".length()));
+		return bytes == null ? null : () -> new ByteArrayInputStream(bytes);
+	}
+
+	/** @param texturePath a derivation-facing path, e.g. {@code block/suspicious_gravel_0} */
+	private byte @Nullable [] derivedTexture(String texturePath) {
+		Derivation derivation = Derivations.byOutput(texturePath);
+		return derivation == null ? null : runDerivation(derivation).get(texturePath);
+	}
+
+	/**
+	 * Every texture {@code derivation} produces for this pack, computed once and cached.
+	 * <p>
+	 * Deliberately not {@code computeIfAbsent}: the computation calls {@link #getResource} to fetch
+	 * its sources, which can re-enter the caches, and a recursive update of a
+	 * {@link ConcurrentHashMap} from inside its own mapping function is undefined at best.
+	 */
+	private Map<String, byte[]> runDerivation(Derivation derivation) {
+		Map<String, byte[]> cached = derivedCache.get(derivation.id());
+		if (cached != null) {
+			return cached;
+		}
+		Set<String> active = deriving.get();
+		if (!active.add(derivation.id())) {
+			return Map.of();
+		}
+		try {
+			Map<String, byte[]> computed = computeDerivation(derivation);
+			derivedCache.put(derivation.id(), computed);
+			return computed;
+		} finally {
+			active.remove(derivation.id());
+		}
+	}
+
+	private Map<String, byte[]> computeDerivation(Derivation derivation) {
+		Map<String, BufferedImage> sources = new LinkedHashMap<>();
+		for (String source : derivation.sources()) {
+			BufferedImage image = readDerivationSource(source);
+			if (image != null) {
+				sources.put(source, image);
+			}
+		}
+		if (sources.isEmpty()) {
+			return Map.of();
+		}
+		Map<String, byte[]> encoded = new LinkedHashMap<>();
+		try {
+			Map<String, BufferedImage> derived = derivation.derive(sources, Params.defaults(derivation.params()));
+			for (Map.Entry<String, BufferedImage> entry : derived.entrySet()) {
+				ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+				ImageIO.write(entry.getValue(), "png", bytes);
+				encoded.put(entry.getKey(), bytes.toByteArray());
+			}
+		} catch (IOException | RuntimeException e) {
+			// One misbehaving derivation must not take the pack down with it: log it and let every
+			// texture it would have produced fall back to vanilla's.
+			AnyResource.LOGGER.warn("Derivation {} failed for pack {}", derivation.id(), location().id(), e);
+			return Map.of();
+		}
+		return Map.copyOf(encoded);
+	}
+
+	/**
+	 * Fetches a derivation input through {@link #getResource} rather than off the delegate, so an
+	 * input can itself be something the conversion synthesizes - the compass frames, for one, exist
+	 * in no pack and are cut from a legacy strip by {@link #computeCompassFrameTexture}.
+	 */
+	private @Nullable BufferedImage readDerivationSource(String texturePath) {
+		Identifier id = Identifier.fromNamespaceAndPath("minecraft", TEXTURE_DIR + texturePath + ".png");
+		IoSupplier<InputStream> supplier = getResource(PackType.CLIENT_RESOURCES, id);
+		if (supplier == null) {
+			return null;
+		}
+		try (InputStream in = supplier.get()) {
+			return ImageIO.read(in);
+		} catch (IOException e) {
+			AnyResource.LOGGER.warn("Failed to read derivation source {} from pack {}", id, location().id(), e);
+			return null;
+		}
+	}
+
+	/**
+	 * Announces derived textures under {@code directoryPrefix} to the atlas.
+	 * <p>
+	 * Same trap as the computed redstone dust textures and GUI sprites above: atlas sprite discovery
+	 * enumerates directories through {@link #listResources} and never asks {@link #getResource} per
+	 * identifier, so a texture that exists only because it was computed has to be named here or the
+	 * atlas never learns of it and the models referencing it quietly keep vanilla's art.
+	 * <p>
+	 * The {@code entity/equipment} outputs need no equivalent - there is no equipment atlas
+	 * ({@code assets/minecraft/atlases} has no entry for it), so those are loaded by path.
+	 */
+	private void announceDerivedTextures(String namespace, String directoryPrefix, PackResources.ResourceOutput output) {
+		if (!namespace.equals("minecraft")) {
+			return;
+		}
+		for (Derivation derivation : Derivations.ALL) {
+			for (String texturePath : derivation.outputs()) {
+				if (!texturePath.startsWith(directoryPrefix)) {
+					continue;
+				}
+				Identifier id = Identifier.fromNamespaceAndPath(namespace, TEXTURE_DIR + texturePath + ".png");
+				// The pack's own art wins, and the delegate listing has already announced it.
+				if (resolveTexture(id, id.getPath()) != null) {
+					continue;
+				}
+				byte[] bytes = derivedTexture(texturePath);
+				if (bytes != null) {
+					output.accept(id, () -> new ByteArrayInputStream(bytes));
+				}
+			}
+		}
 	}
 
 	private @Nullable IoSupplier<InputStream> resolveEquipmentTexture(Identifier location, String path) {

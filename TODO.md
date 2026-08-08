@@ -2,9 +2,34 @@
 
 We should generate textures for as many new items/blocks as possible, using old available textures.
 
-- [ ] Suspicious Gravel: This block is based on gravel but with some impact on it, it can be derived from the gravel texture
+Each one is a `Derivation` in `src/client/java/.../derive/`, declaring its source textures, its output
+textures, and its tunable constants. `LegacyPackResources` consults `Derivations` as a last resort,
+only once the pack has been found to have no art of its own that maps to the requested texture, and
+announces the results from `listResources` so atlas discovery finds them.
+
+**Tune it with `./gradlew runLab`** (http://localhost:8642): the
+derivation lab renders it across all ~70 legacy packs in `~/.minecraft/resourcepacks` at once, next to
+the modern texture being recreated, with a live slider per constant and an error score against vanilla
+1.8.9 as a control. Editing a derivation and refreshing the page picks up the change - no restart.
+Registering a new derivation in `Derivations.ALL` is all it takes to appear there.
+
+`GET /api/verify?d=<id>` is the check worth running before an in-game test: it confirms, per pack, that
+the real `LegacyPackResources` both *serves* each output and *announces* it. The second half is the one
+that fails silently - an unannounced sprite renders as vanilla's art with nothing in the log.
+
+- [x] Suspicious Gravel: This block is based on gravel but with some impact on it, it can be derived from the gravel texture
+      — `SuspiciousGravel`: all four brushing stages, from the pack's own gravel plus its
+      `destroy_stage_*` overlays, blurred. Serves and lists on 58 of 69 packs; the rest lack a source
+      and keep vanilla's. Needs an in-game look.
 - [ ] Copper Ingot + Tools and armor set: Can be derived from Iron ingot and tools.
 - [ ] Netherite Set: can be derived from Iron set
+      — armour and tools done, derived from **diamond** rather than iron: vanilla's diamond and
+      netherite art are the same silhouette twice, so the transform is a pure palette remap and comes
+      out within 1-5% of vanilla's own texture on the control. `NetheriteArmor` covers the four item
+      icons plus the worn `humanoid`/`humanoid_baby`/`humanoid_leggings` layers; `NetheriteTools`
+      covers sword/pickaxe/axe/shovel/hoe. Both share `NetheriteRecolor`.
+      Still to do: ingot, scrap, horse armour (needs the equipment translation extended to
+      `horse_body`), and the smithing template (no legacy equivalent to derive from).
 - [ ] Suspicious Stew: can be derived from soup
 - [ ] Colored Beds: can be derived from the og red bed
 - [ ] Path Blocks: can be derived from grass blocks

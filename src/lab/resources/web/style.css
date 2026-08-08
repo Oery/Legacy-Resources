@@ -1,0 +1,172 @@
+/* Derivation lab. Dark by default - these are textures, and a light page washes out judgement of
+   contrast and of anything with a soft edge. */
+:root {
+	--bg: #16181c;
+	--panel: #1e2127;
+	--line: #2c313a;
+	--text: #e6e8ec;
+	--dim: #949aa6;
+	--accent: #7cc4ff;
+	--bad: #ff8f6b;
+	--tile: 48px;
+	color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+body {
+	margin: 0;
+	background: var(--bg);
+	color: var(--text);
+	font: 13px/1.5 ui-sans-serif, system-ui, sans-serif;
+}
+
+header {
+	display: flex;
+	align-items: center;
+	gap: 16px;
+	padding: 10px 16px;
+	border-bottom: 1px solid var(--line);
+	background: var(--panel);
+	position: sticky;
+	top: 0;
+	z-index: 5;
+}
+
+h1 { font-size: 14px; margin: 0; letter-spacing: .02em; }
+h2 { font-size: 11px; margin: 0 0 8px; text-transform: uppercase; letter-spacing: .08em; color: var(--dim); }
+h2 small { text-transform: none; letter-spacing: 0; font-weight: 400; opacity: .7; }
+
+.status { margin-left: auto; color: var(--dim); font-variant-numeric: tabular-nums; }
+
+.banner {
+	padding: 10px 16px;
+	background: #37231e;
+	border-bottom: 1px solid #5a3428;
+	color: var(--bad);
+	white-space: pre-wrap;
+	font-family: ui-monospace, monospace;
+	font-size: 12px;
+}
+
+main { display: flex; align-items: flex-start; }
+
+aside {
+	width: 300px;
+	flex: none;
+	padding: 16px;
+	border-right: 1px solid var(--line);
+	position: sticky;
+	top: 45px;
+	max-height: calc(100vh - 45px);
+	overflow-y: auto;
+}
+
+aside section { margin-bottom: 24px; }
+
+.field { display: flex; align-items: center; gap: 8px; }
+.field > span { color: var(--dim); }
+.check { display: block; color: var(--dim); margin-top: 6px; }
+select, button, input[type=number] {
+	background: var(--panel);
+	color: var(--text);
+	border: 1px solid var(--line);
+	border-radius: 5px;
+	padding: 4px 8px;
+	font: inherit;
+}
+button { cursor: pointer; }
+button:hover { border-color: var(--accent); }
+
+/* Sliders ---------------------------------------------------------------- */
+.param { margin-bottom: 12px; }
+.param-head { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.param-head code { font-size: 12px; }
+.param-head input { width: 74px; text-align: right; font-variant-numeric: tabular-nums; }
+.param input[type=range] { width: 100%; margin: 2px 0 0; }
+.param.changed code { color: var(--accent); }
+
+.actions { display: flex; gap: 8px; margin-top: 12px; }
+
+/* Image strips and the pack grid ----------------------------------------- */
+.strip { display: flex; flex-wrap: wrap; gap: 4px; }
+
+/* Width is pinned to the tile so a caption can never be what decides how wide a card is - the
+   output names are three times the width of a 48px thumbnail, and letting them size the card cost
+   about half the packs per row. */
+.tile { position: relative; cursor: zoom-in; width: var(--tile); }
+.tile img {
+	display: block;
+	width: var(--tile);
+	/* Aspect-preserving rather than a fixed square: the worn armour layers are 64x32, and squeezing
+	   one into a square tile misrepresents the very thing being judged. */
+	height: auto;
+	max-height: calc(var(--tile) * 2);
+	object-fit: contain;
+	image-rendering: pixelated;
+	background: repeating-conic-gradient(#2a2d33 0 25%, #23262b 0 50%) 0 0 / 12px 12px;
+	border-radius: 3px;
+}
+.tile figcaption {
+	font-size: 10px;
+	color: var(--dim);
+	text-align: center;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.tile figcaption:empty { display: none; }
+.tile.blank img { opacity: .25; }
+
+.grid {
+	flex: 1;
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(calc(var(--tile) * 4 + 26px), 1fr));
+	gap: 8px;
+	padding: 12px;
+	align-content: start;
+}
+
+.card {
+	background: var(--panel);
+	border: 1px solid var(--line);
+	border-radius: 6px;
+	padding: 6px;
+}
+.card.incomplete { opacity: .55; }
+.card-head { display: flex; gap: 6px; align-items: baseline; margin-bottom: 5px; }
+.card-name {
+	font-size: 11px;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.card-res { margin-left: auto; color: var(--dim); font-size: 10px; flex: none; }
+.card-note { color: var(--bad); font-size: 10px; margin-top: 4px; word-break: break-word; }
+.card-sources { margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--line); }
+
+.skipped { margin: 0; padding-left: 16px; color: var(--dim); font-size: 11px; }
+.hint { color: var(--dim); font-size: 11px; margin: 6px 0 0; }
+
+/* Full-resolution viewer -------------------------------------------------- */
+.viewer {
+	position: fixed;
+	inset: 0;
+	background: #000c;
+	display: grid;
+	place-items: center;
+	z-index: 10;
+	cursor: zoom-out;
+}
+
+/* Needed because `display: grid` above outranks the browser's own
+   `[hidden] { display: none }` - without it the overlay never hides and sits over the whole page. */
+.viewer[hidden] { display: none; }
+.viewer img {
+	width: min(70vh, 70vw);
+	height: min(70vh, 70vw);
+	image-rendering: pixelated;
+	background: repeating-conic-gradient(#2a2d33 0 25%, #23262b 0 50%) 0 0 / 24px 24px;
+}
+.viewer figcaption { text-align: center; color: var(--dim); margin-top: 8px; }

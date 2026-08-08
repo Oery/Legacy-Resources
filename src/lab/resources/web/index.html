@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Derivation lab</title>
+	<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+	<h1>Derivation lab</h1>
+	<label class="field">
+		<span>Derivation</span>
+		<select id="derivation"></select>
+	</label>
+	<span id="status" class="status"></span>
+</header>
+
+<div id="banner" class="banner" hidden></div>
+
+<main>
+	<aside>
+		<section>
+			<h2>Target <small>what we're recreating</small></h2>
+			<div id="target" class="strip"></div>
+		</section>
+
+		<section>
+			<h2>Control <small>vanilla 1.8.9 &rarr; derived</small></h2>
+			<div id="control" class="strip"></div>
+			<p class="hint" id="control-note"></p>
+		</section>
+
+		<section>
+			<h2>Constants</h2>
+			<div id="params"></div>
+			<div class="actions">
+				<button id="reset" type="button">Reset</button>
+				<button id="copy" type="button">Copy as Java</button>
+			</div>
+		</section>
+
+		<section>
+			<h2>View</h2>
+			<label class="field">
+				<span>Zoom</span>
+				<input id="zoom" type="range" min="24" max="160" step="8" value="48">
+			</label>
+			<label class="check"><input id="show-sources" type="checkbox"> Show source textures</label>
+			<label class="check"><input id="hide-missing" type="checkbox" checked> Hide packs missing sources</label>
+			<label class="check"><input id="sort-resolution" type="checkbox"> Sort by resolution</label>
+		</section>
+
+		<section>
+			<h2>Skipped packs</h2>
+			<ul id="skipped" class="skipped"></ul>
+		</section>
+	</aside>
+
+	<div id="grid" class="grid"></div>
+</main>
+
+<div id="viewer" class="viewer" hidden>
+	<figure>
+		<img id="viewer-image" alt="">
+		<figcaption id="viewer-caption"></figcaption>
+	</figure>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
