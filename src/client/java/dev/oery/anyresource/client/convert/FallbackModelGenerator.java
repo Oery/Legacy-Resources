@@ -98,6 +98,45 @@ final class FallbackModelGenerator {
 		return json.getBytes(StandardCharsets.UTF_8);
 	}
 
+	/**
+	 * Redstone dust's north/south ("redstone_dust_side" parent) and west/east ("redstone_dust_side_alt"
+	 * parent, rotated 270 at the blockstate level) arm models, keeping vanilla's own shape/UV template
+	 * but overriding the "line" texture variable to point at a mod-namespaced, legacy-derived texture
+	 * instead of vanilla's own {@code block/redstone_dust_line0}/{@code line1} - see
+	 * {@code LegacyPackResources.REDSTONE_DUST_LINE_NS_TEXTURE}'s javadoc for why those vanilla sprite
+	 * IDs can't be used here.
+	 */
+	static byte[] redstoneDustSideModel(String parent, String namespace, String textureStem) {
+		String line = "{\"sprite\":\"" + namespace + ":block/" + textureStem + "\",\"force_translucent\":true}";
+		String json = "{\"parent\":\"minecraft:block/" + parent + "\",\"textures\":{\"line\":" + line + "}}";
+		return json.getBytes(StandardCharsets.UTF_8);
+	}
+
+	/**
+	 * Redstone dust's vertical (climbing-a-block) model, replicating vanilla's own
+	 * {@code redstone_dust_up.json} geometry exactly (it has no parent to extend), but with the
+	 * "line" texture variable pointed at a mod-namespaced texture - see {@link #redstoneDustSideModel}.
+	 * Matches vanilla's exact texture-reference shape (the {@code sprite}/{@code force_translucent}
+	 * object, not a plain string) since these textures are mostly-transparent, unlike this
+	 * generator's other (normally opaque/cutout) fallback textures.
+	 */
+	static byte[] redstoneDustUpModel(String namespace, String textureStem) {
+		String line = "{\"sprite\":\"" + namespace + ":block/" + textureStem + "\",\"force_translucent\":true}";
+		String json = "{\"ambientocclusion\":false,\"textures\":{"
+			+ "\"particle\":\"minecraft:block/redstone_dust_dot\","
+			+ "\"line\":" + line + ","
+			+ "\"overlay\":\"minecraft:block/redstone_dust_overlay\""
+			+ "},\"elements\":["
+			+ "{\"from\":[0,0,0.25],\"to\":[16,16,0.25],\"shade\":false,\"faces\":{"
+			+ "\"south\":{\"uv\":[0,0,16,16],\"texture\":\"#line\",\"tintindex\":0},"
+			+ "\"north\":{\"uv\":[16,0,0,16],\"texture\":\"#line\",\"tintindex\":0}}},"
+			+ "{\"from\":[0,0,0.25],\"to\":[16,16,0.25],\"shade\":false,\"faces\":{"
+			+ "\"south\":{\"uv\":[0,0,16,16],\"texture\":\"#overlay\"},"
+			+ "\"north\":{\"uv\":[16,0,0,16],\"texture\":\"#overlay\"}}}"
+			+ "]}";
+		return json.getBytes(StandardCharsets.UTF_8);
+	}
+
 	/** Facing+lit-aware blockstate matching vanilla's own redstone_wall_torch blockstate. */
 	static byte[] wallLitUnlitBlockstate(String namespace, String litStem, String unlitStem) {
 		String lit = namespace + ":block/" + litStem;

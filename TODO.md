@@ -8,12 +8,26 @@ We should generate textures for as many new items/blocks as possible, using old 
 - [ ] Suspicious Stew: can be derived from soup
 - [ ] Colored Beds: can be derived from the og red bed
 - [ ] Path Blocks: can be derived from grass blocks
+- [ ] Concrete powders block: can be derived from sand
+- [ ] Iron Nuggets / Copper Nuggets: can be derived from gold nuggets
+- [ ] Breeze Rods: can be derived from Blaze Rods
+- [ ] Recovery Compass: can be derived from Compass
+- [ ] Soul fire / soul torch: can be derived from fire / torch
 
 # Not Working
 
 - [x] Fire
 - [x] Bricks
 - [x] Anvil
-- [ ] Sheep Wool
-- [ ] Tall Grass (Double Tall Grass works though)
-- [ ] Player Heads (block)
+- [x] Sheep Wool
+- [x] Tall Grass (Double Tall Grass works though)
+- [x] Player Heads (block)
+- [x] Redstone powder (block)
+- [x] Books / Enchanted Books / Book and quill
+- [x] Bone meal (i think it became a dye instead)
+- [x] Fire Charges
+- [ ] Compass
+- [ ] Smooth stone slab texture
+
+# Issue
+- [ ] Some scaling is happening to block textures in some pack, causing all blocks to look blurry, including blocks using vanilla textures

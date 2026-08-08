@@ -95,6 +95,9 @@
   "chipped_anvil_top": "anvil_top_damaged_1",
   "damaged_anvil_top": "anvil_top_damaged_2",
 
+  "redstone_dust_dot": "redstone_dust_cross",
+  "redstone_dust_overlay": "redstone_dust_line_overlay",
+
   "andesite": "stone_andesite",
   "polished_andesite": "stone_andesite_smooth",
   "diorite": "stone_diorite",
@@ -202,7 +205,7 @@
   "attached_pumpkin_stem": "pumpkin_stem_connected",
   "pumpkin_stem": "pumpkin_stem_disconnected",
 
-  "grass": "tallgrass",
+  "short_grass": "tallgrass",
   "dead_bush": "deadbush",
 
   "wheat_stage0": "wheat_stage_0",

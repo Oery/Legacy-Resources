@@ -110,5 +110,14 @@
   "lava_bucket": "bucket_lava",
   "milk_bucket": "bucket_milk",
   "water_bucket": "bucket_water",
-  "bucket": "bucket_empty"
+  "bucket": "bucket_empty",
+
+  "book": "book_normal",
+  "written_book": "book_written",
+  "enchanted_book": "book_enchanted",
+  "writable_book": "book_writable",
+
+  "bone_meal": "dye_powder_white",
+
+  "fire_charge": "fireball"
 }

@@ -6,6 +6,7 @@ import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
 import dev.oery.anyresource.AnyResource;
 import java.awt.Graphics2D;
+import java.awt.geom.AffineTransform;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -13,6 +14,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -57,16 +59,23 @@ public final class LegacyPackResources implements PackResources {
 		"oak_log", "spruce_log", "birch_log", "jungle_log", "acacia_log", "dark_oak_log"
 	);
 	/**
-	 * The anvil's three damage states are sculpted (non-cube) shapes built from vanilla's own
-	 * {@code template_anvil} parent, with only the {@code top} texture var swapped per state - never
-	 * a {@code cube_all}. Once {@code anvil}/{@code anvil_top}/{@code chipped_anvil_top}/
-	 * {@code damaged_anvil_top} resolve to legacy texture files, the generic
-	 * {@link #computeBlockModel} fallback below would otherwise treat the stem-matching texture as
-	 * license to synthesize a flat {@code cube_all} model, discarding the sculpted shape and the
-	 * per-state top texture. These stems must defer to vanilla's own model/blockstate JSON; only the
-	 * texture bytes need remapping.
+	 * Block model stems that must never receive the generic {@link #computeBlockModel} fallback,
+	 * because their real vanilla model is a thin/sculpted shape (built from a template parent, or a
+	 * multi-face plane) rather than a {@code cube_all}, yet their stem happens to exactly match a
+	 * texture stem that a legacy pack can now resolve. Once that texture resolves, the generic
+	 * fallback below would otherwise treat its existence as license to synthesize a flat
+	 * {@code cube_all} model, discarding the real shape (and, for the anvil, the per-damage-state
+	 * {@code top} texture swap). These stems must defer to vanilla's own model/blockstate JSON; only
+	 * the texture bytes need remapping:
+	 * <ul>
+	 *   <li>{@code anvil}/{@code chipped_anvil}/{@code damaged_anvil} - {@code template_anvil}-based
+	 *   sculpted shape, separate {@code body}/{@code top} texture vars.</li>
+	 *   <li>{@code redstone_dust_dot} - a paper-thin plane (the wire junction dot) with a tinted
+	 *   layer plus an untinted overlay layer, not a cube.</li>
+	 * </ul>
 	 */
-	private static final Set<String> ANVIL_MODEL_STEMS = Set.of("anvil", "chipped_anvil", "damaged_anvil");
+	private static final Set<String> NO_GENERIC_FALLBACK_MODEL_STEMS =
+		Set.of("anvil", "chipped_anvil", "damaged_anvil", "redstone_dust_dot");
 	private static final String HORIZONTAL_SUFFIX = "_horizontal";
 	/**
 	 * Torch-family blocks use vanilla's own thin billboard template models (never a full cube),
@@ -95,10 +104,31 @@ public final class LegacyPackResources implements PackResources {
 	 * mooshroom: red/brown) and moved off the single filename legacy packs know. Only the
 	 * variant matching the pre-split classic look is aliased - the others are new additions
 	 * with no legacy equivalent, so they're left to fall back to vanilla's own textures.
+	 * <p>
+	 * {@code sheep_wool.png} is a similar case, though not a biome/variant split: 1.13 pulled the
+	 * fur layer's texture out of the old single {@code sheep_fur.png} into a dedicated file, with no
+	 * geometry change at all - {@code SheepFurModel.createFurLayer()} bakes the exact same boxes/UV
+	 * offsets/inflation as 1.8.9's {@code ModelSheep1}. The separate {@code sheep_wool_undercoat.png}
+	 * added later (a second, uninflated copy of the plain body shape drawn just under the fur, for
+	 * extra fluffiness) has no legacy equivalent shape+texture pairing, so it's left on vanilla's own
+	 * texture - it is mostly hidden under the fur layer and still gets tinted to the sheep's wool
+	 * color like everything else, so leaving it vanilla is a minor, not a broken, compromise.
+	 * <p>
+	 * {@code textures/entity/player/slim/steve.png} is the default player skin used whenever a
+	 * skull/player render has no real profile to fetch a skin for - including
+	 * {@link net.minecraft.client.resources.DefaultPlayerSkin#getDefaultTexture()} (index 6 of its
+	 * {@code DEFAULT_SKINS} array, which - despite "Steve" being the classic wide-armed look - is
+	 * {@code slim/steve}, not {@code wide/steve}: the array lists all 9 slim variants first, and
+	 * Steve is 7th alphabetically within each group), which is what a player-head block with no
+	 * stored owner renders with. 1.8.9 predates both the slim/wide model split and the multiple
+	 * default-skin choices added later; its single default skin lived unnamespaced at
+	 * {@code textures/entity/steve.png}.
 	 */
 	private static final Map<String, String> ENTITY_TEXTURE_ALIASES = Map.of(
 		"textures/entity/cow/cow_temperate.png", "textures/entity/cow/cow.png",
-		"textures/entity/cow/mooshroom_red.png", "textures/entity/cow/mooshroom.png"
+		"textures/entity/cow/mooshroom_red.png", "textures/entity/cow/mooshroom.png",
+		"textures/entity/sheep/sheep_wool.png", "textures/entity/sheep/sheep_fur.png",
+		"textures/entity/player/slim/steve.png", "textures/entity/steve.png"
 	);
 	/**
 	 * Pre-1.13 Minecraft rendered the fishing bobber by cropping a fixed icon cell out of the
@@ -117,6 +147,69 @@ public final class LegacyPackResources implements PackResources {
 	private static final String MODEL_BLOCK_DIR = "models/block/";
 	private static final String MODEL_ITEM_DIR = "models/item/";
 	private static final String BLOCKSTATES_DIR = "blockstates/";
+	/**
+	 * Vanilla's {@code redstone_dust_dot.png} is a small (verified empirically: a 6x6 blob at
+	 * pixels 5,5 to 11,11) accent centered on an otherwise fully transparent 16x16 canvas - the
+	 * model draws it at full-tile UV, relying on the texture's own transparency to keep it small. In
+	 * 1.8.9, that exact 5,5-11,11 region is one of several crops {@code redstone_none.json} (and
+	 * other named connectivity models) take out of the shared, edge-to-edge {@code
+	 * redstone_dust_cross.png}; there the cropping happens in the model's UV rect instead, because
+	 * every connectivity combination got its own hand-authored model. Simply aliasing the whole
+	 * legacy file - as every other texture in this mod does - would feed that busy, full-tile
+	 * pattern into a slot vanilla expects to be a tiny center dot: it visually swamps the thin line
+	 * segments around it, so every junction ends up reading as an oversized blob regardless of which
+	 * directions are actually connected. So this one texture is synthesized instead of aliased:
+	 * {@link #computeRedstoneDustDotTexture} crops just that matching center region out of the
+	 * legacy {@code redstone_dust_cross.png}, onto a transparent canvas at the same position.
+	 */
+	private static final String REDSTONE_DUST_DOT_TEXTURE_PATH = "textures/block/redstone_dust_dot.png";
+	private static final int REDSTONE_DUST_BASE_CANVAS_SIZE = 16;
+	private static final int REDSTONE_DUST_DOT_CROP_MIN = 5;
+	private static final int REDSTONE_DUST_DOT_CROP_MAX = 11;
+	/**
+	 * Vanilla's {@code redstone_dust_line0.png}/{@code line1.png} are thin vertical bands (verified
+	 * empirically: content confined to a handful of columns around x=6-9, spanning the full height) -
+	 * each half-tile side model samples the top or bottom half of that column to get its arm of the
+	 * wire. 1.8.9's single {@code redstone_dust_line.png} is authored the other way around: a
+	 * horizontal band across the middle rows, spanning the full width (confirmed against two real
+	 * legacy packs). That's why {@code redstone_n.json} - 1.8.9's own north/south-connected model -
+	 * applies an explicit {@code "rotation": 90} to this same texture when using it for a
+	 * north-south segment; without that rotation the asset is oriented for an east-west line.
+	 * Aliasing the file straight across (as most textures in this mod are) skips that compensation:
+	 * the modern top/bottom-half UV crops end up slicing a horizontal band at the wrong axis,
+	 * producing disjointed fragments instead of a coherent line - i.e. "wrong orientation".
+	 * <p>
+	 * That part's fixed by {@link #computeRedstoneDustLineTexture}, which transposes the legacy image
+	 * (swaps x/y, the exact inverse of the model's own missing rotation). But simply serving the
+	 * result back under vanilla's own {@code block/redstone_dust_line0}/{@code line1} sprite IDs -
+	 * the way every other texture in this mod works - hit a second problem, empirically observed
+	 * across several rebuild-and-retest rounds: exactly one of the two sprites would render with
+	 * vanilla's own pixels instead of the legacy ones, and *which* one flipped between rounds with no
+	 * obvious trigger - not tied to which sprite's own serving code changed, nor reproducible by a
+	 * client restart alone without a rebuild. That inconsistency, on its own, was inconclusive. What
+	 * tipped it into "stop fighting vanilla's sprite IDs" territory: {@code redstone_dust_up.json}
+	 * shares no parent model with the side pieces at all (no model inheritance in common) and yet
+	 * exhibited the exact same failure mode as the parent-sharing side1/side_alt1 models - the only
+	 * thing {@code up}/{@code side1}/{@code side_alt1} share is texturing with {@code
+	 * block/redstone_dust_line1}. So the fix serves the transposed textures under brand new sprite
+	 * IDs in this mod's own namespace ({@link
+	 * #REDSTONE_DUST_LINE_NS_TEXTURE}/{@link #REDSTONE_DUST_LINE_EW_TEXTURE}, never referenced by
+	 * vanilla for anything) and point the five affected models at those instead of overriding
+	 * vanilla's models in place - see {@link #computeBlockModel}'s handling of {@link
+	 * #REDSTONE_DUST_NS_MODEL_STEMS}/{@link #REDSTONE_DUST_EW_MODEL_STEMS}.
+	 */
+	private static final String REDSTONE_DUST_LINE_NS_STEM = "legacy_redstone_dust_line_ns";
+	private static final String REDSTONE_DUST_LINE_EW_STEM = "legacy_redstone_dust_line_ew";
+	private static final Identifier REDSTONE_DUST_LINE_NS_TEXTURE = AnyResource.id(NEW_BLOCK_TEXTURE_DIR + REDSTONE_DUST_LINE_NS_STEM + ".png");
+	private static final Identifier REDSTONE_DUST_LINE_EW_TEXTURE = AnyResource.id(NEW_BLOCK_TEXTURE_DIR + REDSTONE_DUST_LINE_EW_STEM + ".png");
+	/** North/south ("side"/"side_alt") redstone dust arm models now pointed at {@link #REDSTONE_DUST_LINE_NS_TEXTURE}. */
+	private static final Set<String> REDSTONE_DUST_NS_MODEL_STEMS = Set.of("redstone_dust_side0", "redstone_dust_side_alt0");
+	/**
+	 * West/east ("side"/"side_alt", rotated 270 at the blockstate level) redstone dust arm models,
+	 * plus the vertical climbing-wire model (which vanilla also happens to texture with {@code
+	 * line1}), now pointed at {@link #REDSTONE_DUST_LINE_EW_TEXTURE}.
+	 */
+	private static final Set<String> REDSTONE_DUST_EW_MODEL_STEMS = Set.of("redstone_dust_side1", "redstone_dust_side_alt1", "redstone_dust_up");
 	private static final String CHEST_TEXTURE_DIR = "textures/entity/chest/";
 	/**
 	 * Chest materials that had a combined double-wide sheet in 1.8.9 ({@code <stem>_double.png})
@@ -165,7 +258,17 @@ public final class LegacyPackResources implements PackResources {
 			return delegate.getResource(type, location);
 		}
 
+		if (location.equals(REDSTONE_DUST_LINE_NS_TEXTURE)) {
+			return resolveJson(location, () -> computeRedstoneDustLineTexture(false));
+		}
+		if (location.equals(REDSTONE_DUST_LINE_EW_TEXTURE)) {
+			return resolveJson(location, () -> computeRedstoneDustLineTexture(true));
+		}
+
 		String path = location.getPath();
+		if (path.equals(REDSTONE_DUST_DOT_TEXTURE_PATH)) {
+			return resolveJson(location, () -> computeRedstoneDustDotTexture(location));
+		}
 		if (path.startsWith(NEW_BLOCK_TEXTURE_DIR) || path.startsWith(NEW_ITEM_TEXTURE_DIR)) {
 			return resolveTexture(location, path);
 		}
@@ -207,13 +310,44 @@ public final class LegacyPackResources implements PackResources {
 			return;
 		}
 
+		if (namespace.equals(AnyResource.MOD_ID) && isOrUnder(directory, "textures/block")) {
+			// The atlas ("blocks") is populated by DirectoryLister enumerating textures/block/ via
+			// listResources, not by walking model texture references - so these two computed,
+			// invented-name sprites (they're not real files in the legacy pack, nothing would ever
+			// list them on its own) must be explicitly announced here, or the atlas never learns
+			// they exist and the models that reference them silently fail to resolve. Only announce
+			// them when the pack actually has redstone dust art to derive them from, matching the
+			// same gate computeBlockModel uses.
+			if (redstoneDustLineSourceExists()) {
+				IoSupplier<InputStream> ns = getResource(PackType.CLIENT_RESOURCES, REDSTONE_DUST_LINE_NS_TEXTURE);
+				IoSupplier<InputStream> ew = getResource(PackType.CLIENT_RESOURCES, REDSTONE_DUST_LINE_EW_TEXTURE);
+				if (ns != null) {
+					output.accept(REDSTONE_DUST_LINE_NS_TEXTURE, ns);
+				}
+				if (ew != null) {
+					output.accept(REDSTONE_DUST_LINE_EW_TEXTURE, ew);
+				}
+			}
+			return;
+		}
+
 		if (isOrUnder(directory, "textures/block")) {
 			String oldDirectory = "textures/blocks" + directory.substring("textures/block".length());
 			delegate.listResources(type, namespace, oldDirectory, (oldId, supplier) -> {
 				Identifier newId = translateListed(oldId, OLD_BLOCK_TEXTURE_DIR, NEW_BLOCK_TEXTURE_DIR, TextureNameMaps::newBlockName);
-				if (newId != null) {
-					output.accept(newId, supplier);
+				if (newId == null) {
+					return;
 				}
+				// Keep in sync with the getResource intercept: the dot is synthesized, not a raw
+				// passthrough of the legacy file, so listing must fetch it the same way.
+				if (newId.getPath().equals(REDSTONE_DUST_DOT_TEXTURE_PATH)) {
+					IoSupplier<InputStream> resource = getResource(PackType.CLIENT_RESOURCES, newId);
+					if (resource != null) {
+						output.accept(newId, resource);
+					}
+					return;
+				}
+				output.accept(newId, supplier);
 			});
 			return;
 		}
@@ -227,8 +361,40 @@ public final class LegacyPackResources implements PackResources {
 			});
 			return;
 		}
+		if (namespace.equals("minecraft") && directoryCovers(directory, "models/block") && redstoneDustLineSourceExists()) {
+			// Model discovery (ModelDiscovery, built from a Map<Identifier, UnbakedModel> assembled
+			// ahead of time) works the same way atlas sprite discovery does: by what gets listed, not
+			// by asking getResource() per identifier on demand. These 5 model files are computed, not
+			// real files in the legacy pack, so - just like the two computed textures above - they
+			// must be explicitly announced here or model discovery never learns they exist and quietly
+			// keeps using vanilla's own (getResource() would answer correctly if ever asked, but nothing
+			// asks). This was the actual cause of "sprite exists in the atlas but the game still shows
+			// vanilla": the texture was discoverable, the model override that would have referenced it
+			// never was.
+			//
+			// Critically, the real query directory here is "models" (ModelManager's MODEL_LISTER
+			// scans that whole tree in one FileToIdConverter, not "models/block" specifically) - a
+			// plain isOrUnder(directory, "models/block") check requires directory to equal or be
+			// nested under "models/block", which "models" itself never satisfies. directoryCovers
+			// checks the relationship the other way around: does the queried directory contain
+			// "models/block"? A harness call that hardcodes "models/block" as the test directory
+			// would pass either way, which is exactly how this slipped through verification before.
+			for (String stem : REDSTONE_DUST_NS_MODEL_STEMS) {
+				announceComputedModel(namespace, stem, output);
+			}
+			for (String stem : REDSTONE_DUST_EW_MODEL_STEMS) {
+				announceComputedModel(namespace, stem, output);
+			}
+		}
 		if (isOrUnder(directory, "models/block") || isOrUnder(directory, "models/item") || isOrUnder(directory, "blockstates")) {
-			delegate.listResources(type, namespace, directory, (id, supplier) -> output.accept(id, rewriteJsonSupplier(id, supplier)));
+			delegate.listResources(type, namespace, directory, (id, supplier) -> {
+				// Keep in sync with the redstone_wire skip in computeBlockstate: the pack's own
+				// old-scheme blockstate must never surface, from listing either.
+				if (id.getPath().equals(BLOCKSTATES_DIR + "redstone_wire.json")) {
+					return;
+				}
+				output.accept(id, rewriteJsonSupplier(id, supplier));
+			});
 			return;
 		}
 		if (isOrUnder(directory, "textures/entity/chest")) {
@@ -244,9 +410,28 @@ public final class LegacyPackResources implements PackResources {
 		delegate.listResources(type, namespace, directory, output);
 	}
 
+	private void announceComputedModel(String namespace, String stem, PackResources.ResourceOutput output) {
+		Identifier id = Identifier.fromNamespaceAndPath(namespace, MODEL_BLOCK_DIR + stem + ".json");
+		IoSupplier<InputStream> resource = getResource(PackType.CLIENT_RESOURCES, id);
+		if (resource != null) {
+			output.accept(id, resource);
+		}
+	}
+
 	@Override
 	public Set<String> getNamespaces(PackType type) {
-		return delegate.getNamespaces(type);
+		Set<String> namespaces = delegate.getNamespaces(type);
+		if (type != PackType.CLIENT_RESOURCES || namespaces.contains(AnyResource.MOD_ID)) {
+			return namespaces;
+		}
+		// The legacy pack only ever advertises "minecraft" (1.8.9 packs never have their own
+		// namespace), but redstone dust's synthesized textures/models are served under this mod's
+		// own namespace (see REDSTONE_DUST_LINE_NS_TEXTURE) - without adding it here, the resource
+		// manager never asks this pack for "any-resource:..." at all, so those references silently
+		// fail to resolve and the affected models fall back to vanilla's own (unconverted) ones.
+		Set<String> withModNamespace = new HashSet<>(namespaces);
+		withModNamespace.add(AnyResource.MOD_ID);
+		return withModNamespace;
 	}
 
 	@Override
@@ -506,14 +691,113 @@ public final class LegacyPackResources implements PackResources {
 		return cached == null ? null : () -> new ByteArrayInputStream(cached);
 	}
 
+	/**
+	 * See {@link #REDSTONE_DUST_DOT_TEXTURE_PATH}: crops the legacy pack's {@code
+	 * redstone_dust_cross.png} down to the 5,5-11,11 region vanilla's own {@code
+	 * redstone_dust_dot.png} occupies, onto an otherwise transparent canvas of the same size, rather
+	 * than aliasing the whole (much busier, full-tile) legacy file.
+	 */
+	private byte @Nullable [] computeRedstoneDustDotTexture(Identifier location) {
+		IoSupplier<InputStream> supplier = delegate.getResource(
+			PackType.CLIENT_RESOURCES, location.withPath(OLD_BLOCK_TEXTURE_DIR + "redstone_dust_cross.png")
+		);
+		if (supplier == null) {
+			return null;
+		}
+		try (InputStream in = supplier.get()) {
+			BufferedImage source = ImageIO.read(in);
+			if (source == null || source.getWidth() != source.getHeight() || source.getWidth() % REDSTONE_DUST_BASE_CANVAS_SIZE != 0) {
+				return null;
+			}
+			int scale = source.getWidth() / REDSTONE_DUST_BASE_CANVAS_SIZE;
+			BufferedImage out = new BufferedImage(source.getWidth(), source.getHeight(), BufferedImage.TYPE_INT_ARGB);
+			Graphics2D g = out.createGraphics();
+			int cropMin = REDSTONE_DUST_DOT_CROP_MIN * scale;
+			int cropSize = (REDSTONE_DUST_DOT_CROP_MAX - REDSTONE_DUST_DOT_CROP_MIN) * scale;
+			blit(g, source, cropMin, cropMin, cropSize, cropSize, cropMin, cropMin);
+			g.dispose();
+			ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+			ImageIO.write(out, "png", bytes);
+			return bytes.toByteArray();
+		} catch (IOException e) {
+			AnyResource.LOGGER.warn("Failed to crop redstone dust dot texture in legacy pack {}", location().id(), e);
+			return null;
+		}
+	}
+
+	/**
+	 * See {@link #REDSTONE_DUST_LINE_NS_TEXTURE}: transposes (swaps x/y) the legacy pack's
+	 * horizontally-banded {@code redstone_dust_line.png} into the vertically-banded orientation
+	 * vanilla's own line textures use, then - only for the east/west texture ({@code mirror}) -
+	 * flips it horizontally on top of that, so the two served sprites aren't byte-identical.
+	 * {@code location} plays no part in picking the source file (unlike every other {@code compute*}
+	 * method here) because both callers now serve brand new, mod-namespaced sprite IDs that have no
+	 * legacy-pack equivalent path to translate from; the legacy source is always
+	 * {@code minecraft:textures/blocks/redstone_dust_line.png}.
+	 */
+	private boolean redstoneDustLineSourceExists() {
+		return redstoneDustLineSource() != null;
+	}
+
+	private @Nullable IoSupplier<InputStream> redstoneDustLineSource() {
+		return delegate.getResource(
+			PackType.CLIENT_RESOURCES, Identifier.fromNamespaceAndPath("minecraft", OLD_BLOCK_TEXTURE_DIR + "redstone_dust_line.png")
+		);
+	}
+
+	private byte @Nullable [] computeRedstoneDustLineTexture(boolean mirror) {
+		IoSupplier<InputStream> supplier = redstoneDustLineSource();
+		if (supplier == null) {
+			return null;
+		}
+		try (InputStream in = supplier.get()) {
+			BufferedImage source = ImageIO.read(in);
+			if (source == null || source.getWidth() != source.getHeight()) {
+				return null;
+			}
+			int size = source.getWidth();
+			BufferedImage transposed = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
+			Graphics2D tg = transposed.createGraphics();
+			tg.drawImage(source, new AffineTransform(0, 1, 1, 0, 0, 0), null);
+			tg.dispose();
+			BufferedImage out = transposed;
+			if (mirror) {
+				out = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
+				Graphics2D g = out.createGraphics();
+				g.drawImage(transposed, size, 0, 0, size, 0, 0, size, size, null);
+				g.dispose();
+			}
+			ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+			ImageIO.write(out, "png", bytes);
+			return bytes.toByteArray();
+		} catch (IOException e) {
+			AnyResource.LOGGER.warn("Failed to transpose redstone dust line texture in legacy pack {}", location().id(), e);
+			return null;
+		}
+	}
+
 	private byte @Nullable [] computeBlockModel(Identifier location, String stem) {
 		byte[] rewritten = tryRewriteJson(location);
 		if (rewritten != null) {
 			return rewritten;
 		}
 		String namespace = location.getNamespace();
-		if (ANVIL_MODEL_STEMS.contains(stem)) {
+		if (NO_GENERIC_FALLBACK_MODEL_STEMS.contains(stem)) {
 			return null;
+		}
+		if (REDSTONE_DUST_NS_MODEL_STEMS.contains(stem) || REDSTONE_DUST_EW_MODEL_STEMS.contains(stem)) {
+			// Only take over these models when the pack actually customizes redstone dust - packs
+			// that don't touch it at all must keep vanilla's own working wire, not a texture-less one.
+			if (!redstoneDustLineSourceExists()) {
+				return null;
+			}
+			if (stem.equals("redstone_dust_up")) {
+				return FallbackModelGenerator.redstoneDustUpModel(AnyResource.MOD_ID, REDSTONE_DUST_LINE_EW_STEM);
+			}
+			boolean ns = REDSTONE_DUST_NS_MODEL_STEMS.contains(stem);
+			String parent = stem.startsWith("redstone_dust_side_alt") ? "redstone_dust_side_alt" : "redstone_dust_side";
+			String textureStem = ns ? REDSTONE_DUST_LINE_NS_STEM : REDSTONE_DUST_LINE_EW_STEM;
+			return FallbackModelGenerator.redstoneDustSideModel(parent, AnyResource.MOD_ID, textureStem);
 		}
 		if (TORCH_MODEL_TEMPLATES.containsKey(stem)) {
 			String textureStem = TORCH_MODEL_TEXTURE_STEM.get(stem);
@@ -553,7 +837,27 @@ public final class LegacyPackResources implements PackResources {
 		return null;
 	}
 
+	/**
+	 * 1.8.9's own {@code blockstates/redstone_wire.json} enumerates one named model per
+	 * connectivity combination ({@code redstone_n}, {@code redstone_ne}, ...,
+	 * {@code redstone_unusueuw} - ~35 in total, see {@code models/block/redstone_n.json} etc. in
+	 * that version), a scheme modern Minecraft dropped entirely in favour of a
+	 * {@code multipart}/{@code redstone_dust_dot}+{@code redstone_dust_side0/1} system; none of
+	 * those old named models exist in modern vanilla assets anymore. A legacy pack that ships its
+	 * own {@code blockstates/redstone_wire.json} (common even for texture-focused packs, since many
+	 * are built by copying the vanilla asset tree) would otherwise have that old-scheme file passed
+	 * straight through by {@link #tryRewriteJson} - {@link JsonRewriter} only rewrites
+	 * {@code "blocks/"}/{@code "items/"} texture-path prefixes, not bare model names like
+	 * {@code "redstone_n"} - leaving most connectivity states pointing at models that no longer
+	 * exist anywhere, i.e. missing-texture/checkerboard. There's no way to honor that old scheme
+	 * against modern's asset layout, so always defer to vanilla's own (current) blockstate and
+	 * models here; only the {@code redstone_dust_dot}/{@code redstone_dust_line0}/
+	 * {@code redstone_dust_line1} textures get remapped, via {@link #resolveTexture}.
+	 */
 	private byte @Nullable [] computeBlockstate(Identifier location, String stem) {
+		if (stem.equals("redstone_wire")) {
+			return null;
+		}
 		byte[] rewritten = tryRewriteJson(location);
 		if (rewritten != null) {
 			return rewritten;
@@ -616,6 +920,11 @@ public final class LegacyPackResources implements PackResources {
 
 	private static boolean isOrUnder(String directory, String prefix) {
 		return directory.equals(prefix) || directory.startsWith(prefix + "/");
+	}
+
+	/** The inverse relationship to {@link #isOrUnder}: does the queried {@code directory} contain {@code target}? */
+	private static boolean directoryCovers(String directory, String target) {
+		return directory.equals(target) || target.startsWith(directory + "/");
 	}
 
 	private static @Nullable Identifier translateListed(Identifier oldId, String oldDir, String newDir, UnaryOperator<String> nameMap) {
