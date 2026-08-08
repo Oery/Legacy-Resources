@@ -1,4 +1,4 @@
-**Goal:** Create a mod that lets players use legacy 1.8.9 resource packs in modern 1.21.8 by converting textures, models, and other assets on the fly.
+**Goal:** Create a mod that lets players use legacy 1.8.9 resource packs in modern Minecraft (the version pinned by `gradle.properties`, currently 26.2) by converting textures, models, and other assets on the fly.
 
 **Assumptions:**  
 - The mod will intercept resource loading, not create permanent files.  

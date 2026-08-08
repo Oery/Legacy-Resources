@@ -29,6 +29,7 @@ We should generate textures for as many new items/blocks as possible, using old 
 - [x] Compass
 - [x] Smooth stone slab texture
 - [x] Some packs have 1.7 textures for steve which are the wrong format, they should be converted to a 1.8 skin format first
+- [x] HUD (hearts, armor, food, air, XP/jump/boss bars, crosshair, hotbar, tab-list ping bars) — `icons.png`/`widgets.png` split into `gui/sprites/**`, see `reference/atlas-mappings.md` section 1
 
 # Issue
 - [x] Some scaling is happening to block textures in some pack, causing all blocks to look blurry, including blocks using vanilla textures

@@ -17,6 +17,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
@@ -274,9 +275,24 @@ public final class LegacyPackResources implements PackResources {
 	 * rather than shipping fixed 64x64/128x64 sheets.
 	 */
 	private static final int CHEST_BASE_CANVAS_SIZE = 64;
+	/**
+	 * Root of modern Minecraft's per-sprite GUI textures. A legacy pack has nothing here - its
+	 * whole HUD lives in two monolithic sheets - so everything under this prefix is synthesized by
+	 * cropping them, see {@link LegacyGuiSprites} for the sprite-by-sprite coordinates and
+	 * {@link #computeGuiSprite} for the cropping itself.
+	 */
+	private static final String GUI_SPRITE_DIR = "textures/gui/sprites/";
+	/** {@link #GUI_SPRITE_DIR} without its trailing slash, i.e. as {@link #listResources} sees it. */
+	private static final String GUI_SPRITE_ROOT = "textures/gui/sprites";
 
 	private final PackResources delegate;
 	private final Map<Identifier, byte[]> jsonCache = new ConcurrentHashMap<>();
+	/**
+	 * Decoded legacy source sheets, keyed by their path in the pack. A single HD {@code icons.png}
+	 * can be 2048x2048 and feeds 70-odd separate sprites; the compass strip likewise feeds 32
+	 * frames. Without this, each one re-decodes the whole PNG.
+	 */
+	private final Map<String, Optional<BufferedImage>> sheetCache = new ConcurrentHashMap<>();
 
 	LegacyPackResources(PackResources delegate) {
 		this.delegate = delegate;
@@ -307,7 +323,16 @@ public final class LegacyPackResources implements PackResources {
 		if (path.startsWith(NEW_ITEM_TEXTURE_DIR)) {
 			Integer compassFrame = parseCompassFrameIndex(path.substring(NEW_ITEM_TEXTURE_DIR.length()));
 			if (compassFrame != null) {
-				return resolveJson(location, () -> computeCompassFrameTexture(location, compassFrame));
+				return resolveJson(location, () -> computeCompassFrameTexture(compassFrame));
+			}
+		}
+		if (path.startsWith(GUI_SPRITE_DIR)) {
+			String spriteName = path.substring(GUI_SPRITE_DIR.length());
+			LegacyGuiSprites.SheetCrop crop = LegacyGuiSprites.SPRITES.get(spriteName);
+			// Unmapped GUI sprites (those with no 1.8.9 equivalent) fall through untouched, so
+			// they keep resolving to vanilla's own art.
+			if (crop != null) {
+				return resolveJson(location, () -> computeGuiSprite(spriteName, crop));
 			}
 		}
 		if (path.startsWith(NEW_BLOCK_TEXTURE_DIR) || path.startsWith(NEW_ITEM_TEXTURE_DIR)) {
@@ -467,6 +492,32 @@ public final class LegacyPackResources implements PackResources {
 			}
 			return;
 		}
+		if (namespace.equals("minecraft")
+			&& (isOrUnder(directory, GUI_SPRITE_ROOT) || directoryCovers(directory, GUI_SPRITE_ROOT))) {
+			// This is the branch that actually makes HUD conversion work. The GUI atlas is built by
+			// DirectoryLister enumerating textures/gui/sprites (see assets/minecraft/atlases/gui.json),
+			// never by asking getResource() per identifier - and these sprites are computed, with no
+			// file of their own in the legacy pack, so nothing would ever list them unless announced
+			// here. Same trap as the computed redstone dust models above.
+			//
+			// The real query is for GUI_SPRITE_ROOT exactly, but handle both directions: isOrUnder
+			// covers a narrower query (e.g. "textures/gui/sprites/hud"), directoryCovers a wider one
+			// (e.g. "textures").
+			String prefix = isOrUnder(directory, GUI_SPRITE_ROOT) ? directory + "/" : GUI_SPRITE_DIR;
+			LegacyGuiSprites.SPRITES.forEach((spriteName, crop) -> {
+				String path = GUI_SPRITE_DIR + spriteName;
+				if (!path.startsWith(prefix)) {
+					return;
+				}
+				Identifier id = Identifier.fromNamespaceAndPath(namespace, path);
+				IoSupplier<InputStream> resource = getResource(PackType.CLIENT_RESOURCES, id);
+				if (resource != null) {
+					output.accept(id, resource);
+				}
+			});
+			// Deliberately no early return: a legacy pack has nothing of its own under this path
+			// today, but swallowing the query outright would silently drop anything it did ship.
+		}
 		delegate.listResources(type, namespace, directory, output);
 	}
 
@@ -606,6 +657,88 @@ public final class LegacyPackResources implements PackResources {
 			}
 		}
 		image.setRGB(dx, dy, w, h, mirrored, 0, w);
+	}
+
+	/**
+	 * Decodes one of the legacy pack's source sheets once and keeps it, since a single sheet backs
+	 * dozens of synthesized sprites. Returns {@code null} when the pack doesn't ship the file (or
+	 * ships something undecodable), which is also how callers learn to leave vanilla's art alone.
+	 */
+	private @Nullable BufferedImage loadSheet(String legacyPath) {
+		return sheetCache.computeIfAbsent(legacyPath, path -> {
+			IoSupplier<InputStream> supplier = delegate.getResource(
+				PackType.CLIENT_RESOURCES, Identifier.fromNamespaceAndPath("minecraft", path)
+			);
+			if (supplier == null) {
+				return Optional.empty();
+			}
+			try (InputStream in = supplier.get()) {
+				return Optional.ofNullable(ImageIO.read(in));
+			} catch (IOException e) {
+				AnyResource.LOGGER.warn("Failed to read {} in legacy pack {}", path, location().id(), e);
+				return Optional.empty();
+			}
+		}).orElse(null);
+	}
+
+	/**
+	 * Crops one modern GUI sprite out of the legacy pack's {@code icons.png}/{@code widgets.png},
+	 * scaling {@link LegacyGuiSprites}'s 256px-base coordinates by the pack's own resolution
+	 * multiplier (HD packs ship 512/1024/2048px sheets, all of which were observed in the wild).
+	 * A sheet that isn't a square multiple of the base size, or that is too small to hold the cell,
+	 * isn't something 1.8.9 could have rendered from either, so those bail out to vanilla's sprite
+	 * rather than guessing.
+	 */
+	private byte @Nullable [] computeGuiSprite(String spriteName, LegacyGuiSprites.SheetCrop crop) {
+		BufferedImage sheet = loadSheet(crop.sheet().legacyPath());
+		if (sheet == null
+			|| sheet.getWidth() != sheet.getHeight()
+			|| sheet.getWidth() % LegacyGuiSprites.SHEET_BASE_SIZE != 0) {
+			return null;
+		}
+		int scale = sheet.getWidth() / LegacyGuiSprites.SHEET_BASE_SIZE;
+		int x = crop.u() * scale;
+		int y = crop.v() * scale;
+		int width = crop.w() * scale;
+		int height = crop.h() * scale;
+		if (x + width > sheet.getWidth() || y + height > sheet.getHeight()) {
+			return null;
+		}
+		try {
+			BufferedImage out = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+			// Deliberately a raw pixel copy rather than a Graphics2D blit like the chest/redstone
+			// paths above: those rearrange faces and need drawImage's transforms, whereas this is a
+			// plain crop, and drawImage's default SRC_OVER composite round-trips every partially
+			// transparent pixel through premultiplied alpha - which shifts colour channels by a
+			// step or two. That is invisible on mostly-opaque art but not here: the hotbar and the
+			// boss bar, the two largest sprites in the table, are semi-transparent almost edge to
+			// edge, and this crop has to hand back the pack's own bytes untouched.
+			out.setRGB(0, 0, width, height, sheet.getRGB(x, y, width, height, null, 0, width), 0, width);
+			if (spriteName.equals(LegacyGuiSprites.HOTBAR_SELECTION) && isRowBlank(out, height - scale, scale)) {
+				// See LegacyGuiSprites.HOTBAR_SELECTION: repeat the row above into the bottom row
+				// the pack never authored, so the selection box keeps a bottom edge.
+				int[] above = out.getRGB(0, height - 2 * scale, width, scale, null, 0, width);
+				out.setRGB(0, height - scale, width, scale, above, 0, width);
+			}
+			ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+			ImageIO.write(out, "png", bytes);
+			return bytes.toByteArray();
+		} catch (IOException e) {
+			AnyResource.LOGGER.warn("Failed to crop GUI sprite {} in legacy pack {}", spriteName, location().id(), e);
+			return null;
+		}
+	}
+
+	/** Whether the {@code height}-tall band of {@code image} starting at {@code y} is fully transparent. */
+	private static boolean isRowBlank(BufferedImage image, int y, int height) {
+		for (int row = y; row < y + height; row++) {
+			for (int x = 0; x < image.getWidth(); x++) {
+				if ((image.getRGB(x, row) >>> 24) != 0) {
+					return false;
+				}
+			}
+		}
+		return true;
 	}
 
 	private byte @Nullable [] computeFishingHookTexture(Identifier location) {
@@ -1084,23 +1217,17 @@ public final class LegacyPackResources implements PackResources {
 	 * pack's actual frame count (its height divided by its own square frame width) rather than
 	 * assuming the strip has exactly 32 frames like modern's own fixed bucket count.
 	 */
-	private byte @Nullable [] computeCompassFrameTexture(Identifier location, int modernFrame) {
-		IoSupplier<InputStream> supplier = delegate.getResource(
-			PackType.CLIENT_RESOURCES, location.withPath(LEGACY_COMPASS_TEXTURE_PATH)
-		);
-		if (supplier == null) {
+	private byte @Nullable [] computeCompassFrameTexture(int modernFrame) {
+		BufferedImage source = loadSheet(LEGACY_COMPASS_TEXTURE_PATH);
+		if (source == null || source.getWidth() <= 0 || source.getHeight() % source.getWidth() != 0) {
 			return null;
 		}
-		try (InputStream in = supplier.get()) {
-			BufferedImage source = ImageIO.read(in);
-			if (source == null || source.getWidth() <= 0 || source.getHeight() % source.getWidth() != 0) {
-				return null;
-			}
-			int frameSize = source.getWidth();
-			int legacyFrameCount = source.getHeight() / frameSize;
-			if (legacyFrameCount <= 0) {
-				return null;
-			}
+		int frameSize = source.getWidth();
+		int legacyFrameCount = source.getHeight() / frameSize;
+		if (legacyFrameCount <= 0) {
+			return null;
+		}
+		try {
 			int legacyFrame = modernFrame * legacyFrameCount / COMPASS_MODERN_FRAME_COUNT;
 			BufferedImage frame = source.getSubimage(0, legacyFrame * frameSize, frameSize, frameSize);
 			ByteArrayOutputStream bytes = new ByteArrayOutputStream();
