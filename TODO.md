@@ -30,4 +30,4 @@ We should generate textures for as many new items/blocks as possible, using old 
 - [ ] Smooth stone slab texture
 
 # Issue
-- [ ] Some scaling is happening to block textures in some pack, causing all blocks to look blurry, including blocks using vanilla textures
+- [x] Some scaling is happening to block textures in some pack, causing all blocks to look blurry, including blocks using vanilla textures

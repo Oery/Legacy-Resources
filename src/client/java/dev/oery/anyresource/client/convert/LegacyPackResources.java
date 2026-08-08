@@ -347,6 +347,9 @@ public final class LegacyPackResources implements PackResources {
 					}
 					return;
 				}
+				if (!isValidLegacyTexture(oldId, supplier)) {
+					return;
+				}
 				output.accept(newId, supplier);
 			});
 			return;
@@ -355,7 +358,7 @@ public final class LegacyPackResources implements PackResources {
 			String oldDirectory = "textures/items" + directory.substring("textures/item".length());
 			delegate.listResources(type, namespace, oldDirectory, (oldId, supplier) -> {
 				Identifier newId = translateListed(oldId, OLD_ITEM_TEXTURE_DIR, NEW_ITEM_TEXTURE_DIR, TextureNameMaps::newItemName);
-				if (newId != null) {
+				if (newId != null && isValidLegacyTexture(oldId, supplier)) {
 					output.accept(newId, supplier);
 				}
 			});
@@ -916,6 +919,42 @@ public final class LegacyPackResources implements PackResources {
 				throw new IOException("Failed to convert " + id + " in legacy pack " + location().id(), e);
 			}
 		};
+	}
+
+	/**
+	 * The shared "blocks"/"items" atlases are populated by {@code DirectoryLister} enumerating
+	 * whatever this method lists - not by walking model texture references - so a stray legacy
+	 * file with no real modern purpose still gets swept in under {@link TextureNameMaps}'s
+	 * identity fallback. A single such orphan, if wildly non-square (e.g. a leftover, unused
+	 * {@code water.png} sitting alongside the properly named {@code water_still.png}/
+	 * {@code water_flow.png}), forces the shared atlas dramatically larger than intended, which
+	 * degrades every sprite packed into it - including unrelated vanilla-textured blocks - not
+	 * just the offending file itself. A block/item texture is only ever legitimately non-square
+	 * as a vertical animation strip with matching frame metadata, so anything non-square lacking
+	 * that backing is rejected here rather than announced to the atlas.
+	 */
+	private boolean isValidLegacyTexture(Identifier oldId, IoSupplier<InputStream> supplier) {
+		if (!oldId.getPath().endsWith(".png")) {
+			return true;
+		}
+		try (InputStream in = supplier.get()) {
+			BufferedImage image = ImageIO.read(in);
+			if (image == null) {
+				return false;
+			}
+			int width = image.getWidth();
+			int height = image.getHeight();
+			if (width == height) {
+				return true;
+			}
+			if (width <= 0 || height % width != 0) {
+				return false;
+			}
+			return delegate.getResource(PackType.CLIENT_RESOURCES, oldId.withPath(oldId.getPath() + ".mcmeta")) != null;
+		} catch (IOException e) {
+			AnyResource.LOGGER.warn("Failed to read legacy texture {} in pack {}", oldId, location().id(), e);
+			return false;
+		}
 	}
 
 	private static boolean isOrUnder(String directory, String prefix) {
