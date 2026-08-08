@@ -5,6 +5,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
 import dev.oery.anyresource.AnyResource;
+import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -12,6 +13,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -104,6 +106,35 @@ public final class LegacyPackResources implements PackResources {
 	private static final String MODEL_BLOCK_DIR = "models/block/";
 	private static final String MODEL_ITEM_DIR = "models/item/";
 	private static final String BLOCKSTATES_DIR = "blockstates/";
+	private static final String CHEST_TEXTURE_DIR = "textures/entity/chest/";
+	/**
+	 * Chest materials that had a combined double-wide sheet in 1.8.9 ({@code <stem>_double.png})
+	 * and now need synthesizing into separate {@code <stem>_left.png}/{@code <stem>_right.png}
+	 * halves. Ender chests never had a double variant on either side, so they're excluded.
+	 */
+	private static final Set<String> CHEST_DOUBLE_STEMS = Set.of("normal", "trapped", "christmas");
+	/**
+	 * Every sprite name the modern chest atlas (a {@code minecraft:directory} source over
+	 * {@code textures/entity/chest/}, see {@code assets/minecraft/atlases/chests.json}) can look
+	 * up. Used to drive {@link #listResources} so the atlas discovers exactly this set instead of
+	 * whatever raw filenames the legacy pack happens to ship (which include never-requested
+	 * {@code _double} sheets and are missing the {@code _left}/{@code _right} halves the atlas
+	 * actually needs) - an unexpected sprite entering that shared, tightly packed atlas is a
+	 * plausible way for a legacy pack to end up with chest faces sampling the wrong texture region.
+	 */
+	private static final List<String> CHEST_TEXTURE_STEMS = List.of(
+		"normal", "normal_left", "normal_right",
+		"trapped", "trapped_left", "trapped_right",
+		"christmas", "christmas_left", "christmas_right",
+		"ender"
+	);
+	/**
+	 * Height (in pixels) of a single-chest canvas at vanilla 1.8.9 resolution; a legacy pack's
+	 * actual resolution multiplier is derived from how many times larger its {@code _double.png}
+	 * is than this, since HD packs (32x, 64x, ...) scale every chest texture up proportionally
+	 * rather than shipping fixed 64x64/128x64 sheets.
+	 */
+	private static final int CHEST_BASE_CANVAS_SIZE = 64;
 
 	private final PackResources delegate;
 	private final Map<Identifier, byte[]> jsonCache = new ConcurrentHashMap<>();
@@ -135,6 +166,13 @@ public final class LegacyPackResources implements PackResources {
 		}
 		if (path.equals(FISHING_HOOK_TEXTURE_PATH)) {
 			return resolveJson(location, () -> computeFishingHookTexture(location));
+		}
+		if (path.startsWith(CHEST_TEXTURE_DIR) && path.endsWith(".png")) {
+			String stem = path.substring(CHEST_TEXTURE_DIR.length(), path.length() - ".png".length());
+			IoSupplier<InputStream> chestTexture = resolveChestTexture(location, stem);
+			if (chestTexture != null) {
+				return chestTexture;
+			}
 		}
 		if (path.startsWith(MODEL_BLOCK_DIR) && path.endsWith(".json")) {
 			String stem = path.substring(MODEL_BLOCK_DIR.length(), path.length() - ".json".length());
@@ -180,6 +218,16 @@ public final class LegacyPackResources implements PackResources {
 		}
 		if (isOrUnder(directory, "models/block") || isOrUnder(directory, "models/item") || isOrUnder(directory, "blockstates")) {
 			delegate.listResources(type, namespace, directory, (id, supplier) -> output.accept(id, rewriteJsonSupplier(id, supplier)));
+			return;
+		}
+		if (isOrUnder(directory, "textures/entity/chest")) {
+			for (String stem : CHEST_TEXTURE_STEMS) {
+				Identifier id = Identifier.fromNamespaceAndPath(namespace, CHEST_TEXTURE_DIR + stem + ".png");
+				IoSupplier<InputStream> resource = getResource(PackType.CLIENT_RESOURCES, id);
+				if (resource != null) {
+					output.accept(id, resource);
+				}
+			}
 			return;
 		}
 		delegate.listResources(type, namespace, directory, output);
@@ -252,6 +300,194 @@ public final class LegacyPackResources implements PackResources {
 			AnyResource.LOGGER.warn("Failed to crop fishing hook icon from legacy particle atlas in pack {}", location().id(), e);
 			return null;
 		}
+	}
+
+	/**
+	 * Both {@code TileEntityChestRenderer} and {@code TileEntityEnderChestRenderer} in 1.8.9 draw
+	 * the chest model under {@code GlStateManager.scale(1.0f, -1.0f, -1.0f)} - a Y and Z axis flip,
+	 * equivalent to a 180-degree rotation around the X axis. Legacy chest art was painted assuming
+	 * that flip happens at render time. Modern's {@code ChestRenderer.modelTransformation} only
+	 * rotates around Y to orient the chest by facing - no Y/Z flip at all. Verified empirically
+	 * (per-face pixel-diff search against the real vanilla textures, not just derived from the
+	 * geometry) rather than trusted from the rotation math alone, since a first attempt at the
+	 * geometric derivation got the per-face transform wrong: swapping which slot each face's
+	 * content occupies is necessary but not sufficient - west/east need a 180-degree rotation in
+	 * place, the down/up swap additionally needs a vertical flip, and the front/back swap
+	 * additionally needs a 180-degree rotation, each confirmed as an exact (zero pixel-difference)
+	 * match against 26.2's own vanilla chest textures.
+	 */
+	private @Nullable IoSupplier<InputStream> resolveChestTexture(Identifier location, String stem) {
+		if (stem.endsWith("_left") || stem.endsWith("_right")) {
+			boolean isLeft = stem.endsWith("_left");
+			String baseStem = stem.substring(0, stem.length() - (isLeft ? "_left" : "_right").length());
+			if (!CHEST_DOUBLE_STEMS.contains(baseStem)) {
+				return null;
+			}
+			return resolveJson(location, () -> computeChestHalfTexture(location, baseStem, isLeft));
+		}
+		return resolveJson(location, () -> computeChestTexture(location, stem));
+	}
+
+	/**
+	 * Un-flips a legacy single (or ender) chest texture in place: same file, same canvas size,
+	 * with each box's DOWN/UP and FRONT/BACK regions swapped per {@link #resolveChestTexture}.
+	 */
+	private byte @Nullable [] computeChestTexture(Identifier location, String stem) {
+		IoSupplier<InputStream> supplier = delegate.getResource(
+			PackType.CLIENT_RESOURCES, location.withPath(CHEST_TEXTURE_DIR + stem + ".png")
+		);
+		if (supplier == null) {
+			return null;
+		}
+		try (InputStream in = supplier.get()) {
+			BufferedImage source = ImageIO.read(in);
+			if (source == null || source.getWidth() != source.getHeight() || source.getWidth() % CHEST_BASE_CANVAS_SIZE != 0) {
+				return null;
+			}
+			int scale = source.getWidth() / CHEST_BASE_CANVAS_SIZE;
+			BufferedImage out = new BufferedImage(source.getWidth(), source.getHeight(), BufferedImage.TYPE_INT_ARGB);
+			Graphics2D g = out.createGraphics();
+			blitChestBoxUnflip(g, source, scale, 0, 0, 14, 5, 14); // lid
+			blitChestBoxUnflip(g, source, scale, 0, 19, 14, 10, 14); // body
+			blitChestBoxUnflip(g, source, scale, 0, 0, 2, 4, 1); // lock
+			g.dispose();
+			ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+			ImageIO.write(out, "png", bytes);
+			return bytes.toByteArray();
+		} catch (IOException e) {
+			AnyResource.LOGGER.warn("Failed to un-flip {} chest texture in legacy pack {}", stem, location().id(), e);
+			return null;
+		}
+	}
+
+	/**
+	 * Synthesizes a modern {@code <stem>_left.png}/{@code <stem>_right.png} chest-half texture
+	 * from a legacy pack's combined {@code <stem>_double.png} sheet. 1.8.9 rendered the whole
+	 * double chest as one box twice the width of a single chest (30 units vs 14); modern splits it
+	 * into two independent boxes, each 15 units wide on its own square canvas. Because both the
+	 * canvas size and the box width changed, this can't be a single rectangular crop - each face
+	 * whose size depends on box width (top/bottom/front/back) needs to be sliced at its own
+	 * midpoint into its two halves, on top of the DOWN/UP and FRONT/BACK swap from
+	 * {@link #resolveChestTexture}.
+	 */
+	private byte @Nullable [] computeChestHalfTexture(Identifier location, String baseStem, boolean isLeft) {
+		IoSupplier<InputStream> doubleSupplier = delegate.getResource(
+			PackType.CLIENT_RESOURCES, location.withPath(CHEST_TEXTURE_DIR + baseStem + "_double.png")
+		);
+		if (doubleSupplier == null) {
+			return null;
+		}
+		try (InputStream in = doubleSupplier.get()) {
+			BufferedImage source = ImageIO.read(in);
+			if (source == null || source.getWidth() != source.getHeight() * 2 || source.getHeight() % CHEST_BASE_CANVAS_SIZE != 0) {
+				return null;
+			}
+			int scale = source.getHeight() / CHEST_BASE_CANVAS_SIZE;
+			int canvasSize = CHEST_BASE_CANVAS_SIZE * scale;
+			BufferedImage out = new BufferedImage(canvasSize, canvasSize, BufferedImage.TYPE_INT_ARGB);
+			Graphics2D g = out.createGraphics();
+			blitChestBoxHalf(g, source, isLeft, scale, 0, 0, 30, 5, 14, 0, 0, 15); // lid
+			blitChestBoxHalf(g, source, isLeft, scale, 0, 19, 30, 10, 14, 0, 19, 15); // body
+			blitChestBoxHalf(g, source, isLeft, scale, 0, 0, 2, 4, 1, 0, 0, 1); // lock
+			g.dispose();
+			ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+			ImageIO.write(out, "png", bytes);
+			return bytes.toByteArray();
+		} catch (IOException e) {
+			AnyResource.LOGGER.warn("Failed to synthesize {} chest half texture in legacy pack {}", baseStem, location().id(), e);
+			return null;
+		}
+	}
+
+	/**
+	 * Un-flips one box's worth of a legacy chest sheet (the lid, the body, or the tiny lock nub -
+	 * each unwrapped via the classic Minecraft box-UV formula) onto the same canvas position:
+	 * west/east rotate 180 degrees in place; the down/up and front/back regions swap slots, with
+	 * down/up additionally flipped vertically and front/back additionally rotated 180 degrees.
+	 */
+	private static void blitChestBoxUnflip(Graphics2D g, BufferedImage source, int scale, int tx, int ty, int w, int h, int d) {
+		tx *= scale;
+		ty *= scale;
+		w *= scale;
+		h *= scale;
+		d *= scale;
+		int u1 = tx + d;
+		int u2 = u1 + w;
+		int u3 = u2 + d;
+		int v1 = ty + d;
+		blitRot180(g, source, tx, v1, d, h, tx, v1); // west
+		blitRot180(g, source, u2, v1, d, h, u2, v1); // east
+		blitFlipV(g, source, u2, ty, w, d, u1, ty); // dest-down <- source-up
+		blitFlipV(g, source, u1, ty, w, d, u2, ty); // dest-up <- source-down
+		blitRot180(g, source, u3, v1, w, h, u1, v1); // dest-front <- source-back
+		blitRot180(g, source, u1, v1, w, h, u3, v1); // dest-back <- source-front
+	}
+
+	/**
+	 * Copies one box's worth of a legacy double-chest sheet (the lid, the body, or the tiny lock
+	 * nub - each unwrapped via the classic Minecraft box-UV formula, see {@link #computeChestHalfTexture})
+	 * onto a single chest-half canvas, applying the same Y/Z-flip correction as
+	 * {@link #blitChestBoxUnflip} together with the width split. {@code legacyW} is the full
+	 * double-box width (twice {@code modernW}, the modern half-box width); faces whose size scales
+	 * with box width (down/up/front/back) are sliced at the midpoint so each half gets only its own
+	 * half of the artwork. Which half-slice feeds which destination, and in which orientation, was
+	 * verified empirically per {@link #resolveChestTexture} (an exact pixel match against 26.2's
+	 * own {@code normal_left.png}/{@code normal_right.png}) rather than assumed - the rotation
+	 * applied to a face also reverses which half of its source slice ends up on which side, so the
+	 * slice offset for down/up/back is the *opposite* of what a naive "left gets the first half"
+	 * rule would give for front. The two side faces are the true left/right edges of the whole
+	 * double chest, so only one of them has source art for a given half - the interior seam (never
+	 * visible in the legacy double chest) is left blank on the other side. All box coordinates are
+	 * expressed at vanilla 1.8.9 resolution (16px/block) and scaled up by {@code scale} for HD packs.
+	 */
+	private static void blitChestBoxHalf(
+		Graphics2D g, BufferedImage source, boolean isLeft, int scale,
+		int legacyTx, int legacyTy, int legacyW, int legacyH, int legacyD,
+		int modernTx, int modernTy, int modernW
+	) {
+		legacyTx *= scale;
+		legacyTy *= scale;
+		legacyW *= scale;
+		legacyH *= scale;
+		legacyD *= scale;
+		modernTx *= scale;
+		modernTy *= scale;
+		modernW *= scale;
+		int legacyU1 = legacyTx + legacyD;
+		int legacyU2 = legacyU1 + legacyW;
+		int legacyU3 = legacyU2 + legacyD;
+		int legacyV1 = legacyTy + legacyD;
+		int modernU1 = modernTx + legacyD;
+		int modernU2 = modernU1 + modernW;
+		int modernU3 = modernU2 + legacyD;
+		int modernV1 = modernTy + legacyD;
+		// The left half's model culls its WEST face (interior seam) and renders EAST; the right
+		// half culls EAST and renders WEST - see ChestModel.createDoubleBodyLeftLayer/-RightLayer's
+		// visibleFaces. Fill whichever side is actually rendered; the culled side is left blank.
+		if (isLeft) {
+			blitRot180(g, source, legacyU2, legacyV1, legacyD, legacyH, modernU2, modernV1);
+		} else {
+			blitRot180(g, source, legacyTx, legacyV1, legacyD, legacyH, modernTx, modernV1);
+		}
+		int downUpOffset = isLeft ? modernW : 0;
+		int frontOffset = isLeft ? 0 : modernW;
+		int backOffset = isLeft ? modernW : 0;
+		blitFlipV(g, source, legacyU2 + downUpOffset, legacyTy, modernW, legacyD, modernU1, modernTy); // dest-down <- source-up
+		blitFlipV(g, source, legacyU1 + downUpOffset, legacyTy, modernW, legacyD, modernU2, modernTy); // dest-up <- source-down
+		blitRot180(g, source, legacyU3 + frontOffset, legacyV1, modernW, legacyH, modernU1, modernV1); // dest-front <- source-back
+		blitRot180(g, source, legacyU1 + backOffset, legacyV1, modernW, legacyH, modernU3, modernV1); // dest-back <- source-front
+	}
+
+	private static void blit(Graphics2D g, BufferedImage source, int sx, int sy, int w, int h, int dx, int dy) {
+		g.drawImage(source, dx, dy, dx + w, dy + h, sx, sy, sx + w, sy + h, null);
+	}
+
+	private static void blitFlipV(Graphics2D g, BufferedImage source, int sx, int sy, int w, int h, int dx, int dy) {
+		g.drawImage(source, dx, dy + h, dx + w, dy, sx, sy, sx + w, sy + h, null);
+	}
+
+	private static void blitRot180(Graphics2D g, BufferedImage source, int sx, int sy, int w, int h, int dx, int dy) {
+		g.drawImage(source, dx + w, dy + h, dx, dy, sx, sy, sx + w, sy + h, null);
 	}
 
 	private @Nullable IoSupplier<InputStream> resolveJson(Identifier location, Supplier<byte[]> compute) {
