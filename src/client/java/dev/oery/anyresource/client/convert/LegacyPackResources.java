@@ -56,6 +56,17 @@ public final class LegacyPackResources implements PackResources {
 	private static final Set<String> LOG_STEMS = Set.of(
 		"oak_log", "spruce_log", "birch_log", "jungle_log", "acacia_log", "dark_oak_log"
 	);
+	/**
+	 * The anvil's three damage states are sculpted (non-cube) shapes built from vanilla's own
+	 * {@code template_anvil} parent, with only the {@code top} texture var swapped per state - never
+	 * a {@code cube_all}. Once {@code anvil}/{@code anvil_top}/{@code chipped_anvil_top}/
+	 * {@code damaged_anvil_top} resolve to legacy texture files, the generic
+	 * {@link #computeBlockModel} fallback below would otherwise treat the stem-matching texture as
+	 * license to synthesize a flat {@code cube_all} model, discarding the sculpted shape and the
+	 * per-state top texture. These stems must defer to vanilla's own model/blockstate JSON; only the
+	 * texture bytes need remapping.
+	 */
+	private static final Set<String> ANVIL_MODEL_STEMS = Set.of("anvil", "chipped_anvil", "damaged_anvil");
 	private static final String HORIZONTAL_SUFFIX = "_horizontal";
 	/**
 	 * Torch-family blocks use vanilla's own thin billboard template models (never a full cube),
@@ -501,6 +512,9 @@ public final class LegacyPackResources implements PackResources {
 			return rewritten;
 		}
 		String namespace = location.getNamespace();
+		if (ANVIL_MODEL_STEMS.contains(stem)) {
+			return null;
+		}
 		if (TORCH_MODEL_TEMPLATES.containsKey(stem)) {
 			String textureStem = TORCH_MODEL_TEXTURE_STEM.get(stem);
 			return textureResolves(namespace, NEW_BLOCK_TEXTURE_DIR, textureStem)

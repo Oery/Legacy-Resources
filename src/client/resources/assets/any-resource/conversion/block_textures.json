@@ -85,6 +85,15 @@
   "mossy_stone_bricks": "stonebrick_mossy",
   "mossy_cobblestone": "cobblestone_mossy",
   "chiseled_stone_bricks": "stonebrick_carved",
+  "bricks": "brick",
+
+  "fire_0": "fire_layer_0",
+  "fire_1": "fire_layer_1",
+
+  "anvil": "anvil_base",
+  "anvil_top": "anvil_top_damaged_0",
+  "chipped_anvil_top": "anvil_top_damaged_1",
+  "damaged_anvil_top": "anvil_top_damaged_2",
 
   "andesite": "stone_andesite",
   "polished_andesite": "stone_andesite_smooth",
