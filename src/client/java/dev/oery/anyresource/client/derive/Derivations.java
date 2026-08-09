@@ -17,7 +17,8 @@ public final class Derivations {
 	public static final List<Derivation> ALL = List.of(
 		new SuspiciousGravel(),
 		new NetheriteArmor(),
-		new NetheriteTools()
+		new NetheriteTools(),
+		new Beds()
 	);
 
 	private static final Map<String, Derivation> BY_OUTPUT = indexByOutput();
