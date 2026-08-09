@@ -115,7 +115,43 @@ that fails silently - an unannounced sprite renders as vanilla's art with nothin
       it) and the frame by the timber comparison, so tightening it buys nothing and starts slicing
       blankets that are not one hue — nebula's runs a gradient cyan to violet across a single face.
       Needs an in-game look.
-- [ ] Path Blocks: can be derived from grass blocks
+- [x] Path Blocks: can be derived from grass blocks
+      — `DirtPath`, both faces. Vanilla's own pair turned out to say exactly how the block is built.
+      `dirt_path_side` is `dirt` with the grass block's fringe painted over it: its crust falls on
+      precisely the pixels `grass_block_side_overlay` marks, shifted **down one pixel**, 240 of 240
+      agreeing, and 193 of the 195 pixels outside that mask are `dirt` itself at the same coordinate.
+      Row 0 is transparent, which `models/block/dirt_path.json` explains — the block is 15/16 tall and
+      its side UV starts at `v=1`, so that row is never sampled. `dirt_path_top` is dirt's palette
+      flattened and warmed: mean luminance x1.21, spread down to a standard deviation of 9.2 from
+      22.9, hue +14.7 degrees, saturation x1.11. The seven packs that drew their own path for 1.9-1.12
+      agree independently — 14 to 21 degrees of hue, a 1.15x to 1.24x lift — and one of them draws in
+      greyscale throughout, which is why saturation is a multiplier on the pack's own rather than a
+      target to reach.
+      What the top's *pattern* is made of is the only thing vanilla leaves open, since its path top is
+      noise unrelated to anything else. It comes from `grass_block_top`, so the path is not a
+      recoloured dirt block; flattening the spread to `spread` is what stops it reading as grass
+      instead, taking a pack's blades down to a mottle. Both faces are levelled against their own
+      source's mean and deviation, which is what lets grass (17.7) and dirt (22.9) land on one palette
+      without either being special-cased, so the top and the side's crust agree.
+      `crust_rows` is a clamp, not a description, and it is the one thing holding the side together:
+      corpus overlays are nothing like uniform — vanilla's fringe ends at row 3, 13 packs run to row
+      5, 11 to rows 6-7, and 4 tint the whole side, which unclamped would repaint every pixel and
+      leave a block that is solid crust. It ships at 8 on how it reads in game, not on the control,
+      which wants 4: at 8 the pack's own fringe is what shapes the crust nearly everywhere, and only
+      the 16 packs that would have swallowed the face are held back, at half of it. The control is
+      indifferent either way — vanilla's own overlay stops at row 3, so the clamp never binds on it.
+      A pack whose overlay is missing, odd-sized or drawn entirely transparent (5 of 83) gets a flat
+      band instead of being declined; a trodden edge is straight anyway, and the fringe only ever
+      ragged it.
+      Control matches to about a count on every measure — top 123.82/9.28/40.6°/0.557 against
+      vanilla's 123.31/9.13/40.7°/0.559 — and below the crust the side is byte-identical to vanilla's,
+      since there it *is* `dirt.png`. What is left is that the derived top is a finer field than the
+      control: vanilla's is 4 shades against grass top's 66. `levels` posterises it back and ships off,
+      because that is right for 16x art and wrong for a 128x pack's gradients; it is the first thing to
+      sweep. Serves and lists on 61 of 69 packs (60 both faces, 1 the side alone), the other 8 having
+      no dirt at all, and no pack has more than half its side repainted. `block_textures.json` also
+      now maps `dirt_path_*` to `grass_path_*`, so the 7 packs that shipped real 1.9-1.12 path art use
+      their own instead of a derived one.
 - [ ] Concrete powders block: can be derived from sand
 - [ ] Iron Nuggets / Copper Nuggets: can be derived from gold nuggets
 - [ ] Breeze Rods: can be derived from Blaze Rods
@@ -123,6 +159,7 @@ that fails silently - an unannounced sprite renders as vanilla's art with nothin
 - [ ] Soul fire / soul torch: can be derived from fire / torch
 - [ ] Pillagers: can probably be derived from villagers
 - [ ] Trap doors: from their respective wood (very experimental)
+- [ ] White Dye: should be derived from another dye (magenta for example)
 
 # Not Working
 

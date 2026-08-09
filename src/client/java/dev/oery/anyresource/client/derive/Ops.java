@@ -1,5 +1,6 @@
 package dev.oery.anyresource.client.derive;
 
+import java.awt.Color;
 import java.awt.image.BufferedImage;
 import org.jspecify.annotations.Nullable;
 
@@ -217,6 +218,28 @@ public final class Ops {
 	/** Perceptual brightness, 0-255, on the sRGB coefficients. */
 	public static int luminance(int argb) {
 		return (int) Math.round(0.2126 * red(argb) + 0.7152 * green(argb) + 0.0722 * blue(argb));
+	}
+
+	/**
+	 * The fully bright form of {@code hue}/{@code saturation}, scaled down until its luminance is
+	 * {@code target}.
+	 * <p>
+	 * Scaling a bright colour is what keeps the tint honest at low light levels. Feeding the target
+	 * straight into HSB brightness would leave the saturation applied to a value that is already dark,
+	 * and every shadow pixel would come out closer to flat black than the tint asks for.
+	 *
+	 * @param hue as a fraction of the colour wheel, the form {@link Color#HSBtoRGB} takes
+	 */
+	public static int atLuminance(double hue, double saturation, double target) {
+		int bright = Color.HSBtoRGB((float) hue, (float) Math.clamp(saturation, 0, 1), 1);
+		double luminance = luminance(bright);
+		double scale = luminance <= 0 ? 0 : target / luminance;
+		return argb(
+			255,
+			(int) Math.round(red(bright) * scale),
+			(int) Math.round(green(bright) * scale),
+			(int) Math.round(blue(bright) * scale)
+		);
 	}
 
 	/** Replaces {@code argb}'s alpha, leaving its colour alone. */

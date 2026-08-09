@@ -20,7 +20,8 @@ public final class Derivations {
 		new NetheriteTools(),
 		new CopperArmor(),
 		new CopperTools(),
-		new Beds()
+		new Beds(),
+		new DirtPath()
 	);
 
 	private static final Map<String, Derivation> BY_OUTPUT = indexByOutput();

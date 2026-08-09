@@ -269,31 +269,11 @@ abstract class MetalRecolor implements Derivation {
 			double saturation = saturationShadow + (saturationHighlight - saturationShadow) * position;
 			float[] hsb = Color.RGBtoHSB(Ops.red(argb), Ops.green(argb), Ops.blue(argb), null);
 			out[i] = Ops.withAlpha(
-				atLuminance(blendHue(hsb[0], hue, keepHue), saturation, ramp.luminance(position)),
+				Ops.atLuminance(blendHue(hsb[0], hue, keepHue), saturation, ramp.luminance(position)),
 				Ops.alpha(argb)
 			);
 		}
 		return Ops.image(out, source.getWidth(), source.getHeight());
-	}
-
-	/**
-	 * The fully bright form of {@code hue}/{@code saturation}, scaled down until its luminance is
-	 * {@code target}.
-	 * <p>
-	 * Scaling a bright colour is what keeps the tint honest at low light levels. Feeding the target
-	 * straight into HSB brightness would leave the saturation applied to a value that is already dark,
-	 * and every shadow pixel would come out closer to flat black than the tint asks for.
-	 */
-	private static int atLuminance(double hue, double saturation, double target) {
-		int bright = Color.HSBtoRGB((float) hue, (float) Math.clamp(saturation, 0, 1), 1);
-		double luminance = Ops.luminance(bright);
-		double scale = luminance <= 0 ? 0 : target / luminance;
-		return Ops.argb(
-			255,
-			(int) Math.round(Ops.red(bright) * scale),
-			(int) Math.round(Ops.green(bright) * scale),
-			(int) Math.round(Ops.blue(bright) * scale)
-		);
 	}
 
 	/** Interpolates around the colour wheel the short way, so a blend never sweeps through the spectrum. */

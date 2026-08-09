@@ -118,6 +118,9 @@
   "podzol_top": "dirt_podzol_top",
   "podzol_side": "dirt_podzol_side",
 
+  "dirt_path_top": "grass_path_top",
+  "dirt_path_side": "grass_path_side",
+
   "farmland": "farmland_dry",
 
   "oak_log": "log_oak",
