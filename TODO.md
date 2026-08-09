@@ -122,6 +122,7 @@ that fails silently - an unannounced sprite renders as vanilla's art with nothin
 - [ ] Recovery Compass: can be derived from Compass
 - [ ] Soul fire / soul torch: can be derived from fire / torch
 - [ ] Pillagers: can probably be derived from villagers
+- [ ] Trap doors: from their respective wood (very experimental)
 
 # Not Working
 
@@ -159,6 +160,26 @@ that fails silently - an unannounced sprite renders as vanilla's art with nothin
       at all — 1.8.9 had exactly one wooden trapdoor. Pointing them all at the pack's single `trapdoor`
       would make the inverse map ambiguous and give a birch trapdoor oak art, so it is a judgement call
       rather than a fix; deriving them from the pack's own planks is the better answer.
+- [ ] Clouds?
 
 # Issue
 - [x] Some scaling is happening to block textures in some pack, causing all blocks to look blurry, including blocks using vanilla textures
+- [x] Quartz pillar: the top face converted but the side face stayed vanilla
+      — the map was keyed `quartz_pillar`, which is what the side texture was called between 1.13 and
+      its rename to `quartz_pillar_side`. Modern asks for `quartz_pillar_side`, found no entry, fell
+      through to identity and looked for `blocks/quartz_pillar_side.png`, which **no** pack ships; 67
+      ship `quartz_block_lines`. The top's entry was right all along, hence one face working and not the
+      other. Same shape as the oak door bug but the opposite cause: there the *legacy* name was wrong,
+      here the *modern* one went stale.
+      Both mapping tables are now clean in both directions — every legacy target exists in
+      `reference/1.8.9`, every modern key exists in `reference/26.2` — bar the two below.
+- [ ] `bone_meal` is served but never announced
+      — 1.8.9 had one `dye_powder_white` where modern has both `bone_meal` and `white_dye`, so both
+      entries point at it. The forward direction is right and deliberate, but `TextureNameMaps.invert`
+      is one-to-one and `putIfAbsent` gives the legacy name to `white_dye`, so `listResources` never
+      announces `bone_meal` — the half that fails silently. Needs the inverse to be one-to-many and
+      `listResources` to emit every modern name for a legacy file, not just the first.
+- [ ] `item_textures.json` maps `crossbow` -> `crossbow_standby`, which exists in neither era
+      — 1.8.9 has no crossbow, 26.2's texture is `crossbow_standby`, and no corpus pack ships crossbow
+      art. Dead in both directions rather than harmful; either drop it or point `crossbow_standby` at
+      something real.

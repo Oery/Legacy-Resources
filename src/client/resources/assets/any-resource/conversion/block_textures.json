@@ -75,7 +75,7 @@
   "chiseled_red_sandstone": "red_sandstone_carved",
   "cut_red_sandstone": "red_sandstone_smooth",
 
-  "quartz_pillar": "quartz_block_lines",
+  "quartz_pillar_side": "quartz_block_lines",
   "quartz_pillar_top": "quartz_block_lines_top",
   "chiseled_quartz_block": "quartz_block_chiseled",
   "chiseled_quartz_block_top": "quartz_block_chiseled_top",
