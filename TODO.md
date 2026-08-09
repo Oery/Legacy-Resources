@@ -198,6 +198,7 @@ that fails silently - an unannounced sprite renders as vanilla's art with nothin
       would make the inverse map ambiguous and give a birch trapdoor oak art, so it is a judgement call
       rather than a fix; deriving them from the pack's own planks is the better answer.
 - [ ] Clouds?
+- [ ] Noteblocks
 
 # Issue
 - [x] Some scaling is happening to block textures in some pack, causing all blocks to look blurry, including blocks using vanilla textures
@@ -210,6 +211,55 @@ that fails silently - an unannounced sprite renders as vanilla's art with nothin
       here the *modern* one went stale.
       Both mapping tables are now clean in both directions — every legacy target exists in
       `reference/1.8.9`, every modern key exists in `reference/26.2` — bar the two below.
+- [x] PureBDcraft: many blocks render as pink/black cubes, and its glass pane and door item icons too
+      — the packs this hits are the ones that ship models and blockstates of their own rather than
+      textures alone (22 of 69 in the corpus, PureBDcraft among them; a texture-only pack was never
+      affected because it leans on vanilla's models, which do resolve). Two independent causes, either
+      one fatal on its own:
+      1. **Models were served raw.** The rewrite branch in `listResources` tested
+         `isOrUnder(directory, "models/block")`, but `ModelManager` asks for the whole `models` tree in
+         one pass — and `"models"` is neither equal to nor under `"models/block"`, so every pack model
+         fell through to the unconverted delegate listing. Its texture references stayed
+         `blocks/cobblestone`, a sprite the block atlas (which enumerates `textures/block`) does not
+         contain: 390 missing sprite references in PureBDcraft alone, 1816 in vanilla 1.8.9's own tree.
+         Both trees only ever reach the game *through* listing, so the fix routes each listed file
+         through `getResource` — one path, one set of decisions.
+      2. **Blockstates were only string-rewritten.** A legacy blockstate names its models bare
+         (`"model": "cobblestone"`, relative to `models/block/`) and spells "every state" as `"normal"`;
+         modern reads the first as `minecraft:cobblestone` and throws on the second. 31 of PureBDcraft's
+         42 blockstates left *every* state of their block unmodelled — stone, cobblestone, dirt, sand,
+         gravel, ice, sandstone, glass panes, iron doors, torches, ladders, levers. `BlockstateConverter`
+         now converts them properly and refuses, per file, anything it cannot convert completely, so
+         vanilla's own blockstate stays in play instead of a half-working one. Same call the
+         `redstone_wire` skip already made, generalized.
+      Models get the same all-or-nothing treatment, since modern answers a dangling reference with the
+      missing model rather than with the file being overridden: 19 of PureBDcraft's item models extend
+      parents the flattening deleted (`block/glass_pane_ns`, `item/iron_door_item`) and are now left to
+      vanilla, which is where those pink icons came from.
+      One more collision came out of the same audit, and it is the reason a **torch** was pink in the
+      three packs that copy 1.8's asset tree wholesale: the two eras split their models at different
+      points. 1.8's `models/block/torch.json` is bare geometry over an unbound `#torch`, bound by
+      `normal_torch.json` extending it; modern made `block/torch` the finished model and
+      `block/template_torch` the geometry. Served under that name, vanilla's blockstate gets a model whose
+      every face is textureless. A parentless model that leaves a variable unbound is therefore refused —
+      but only where modern ships a model of the same name, since a legacy-only template name is
+      unreachable except through the pack's own models, which do bind it. That is 38 files in bluefault
+      and Darkpack, 65 in the largest pack, 1 in three others, and none in PureBDcraft (whose torch model
+      binds its own textures, which is why its torches were fine while its stone was not).
+      A file the pack authored now settles the question by itself: converted if it converts, otherwise
+      vanilla's, never a synthesized stand-in. Letting synthesis catch a refused blockstate is how a lever
+      came back as a full cube (its 1.8 `facing=up_z` selectors cannot convert, but a `block/lever`
+      texture resolves, so `singleVariantBlockstate` happily built one) - the fallback generators are for
+      what a pack *doesn't* ship.
+      Measured by driving the real conversion and then the game's own loader (`BlockStateModelDispatcher`
+      parse + `instantiate`) over every pack: blockstate files leaving states unmodelled go 31 → 0 for
+      PureBDcraft, 251 → 0 for vanilla 1.8.9's own tree, 264 → 0 for the largest pack in the corpus, and
+      0 after across all 69, with no missing sprite references left in any served model.
+      Still imprecise: `spriteResolves` (and `textureResolves` before it) asks whether a texture *exists*,
+      not whether `listResources` announces it under that exact name. A reference to an already-flattened
+      path carrying a pre-flattening stem - `block/stonebrick`, where the atlas only ever gets
+      `block/stone_bricks` - therefore passes. Nothing in the corpus is reachable through one today, but
+      the exact test is the announced-name round-trip, not file existence.
 - [ ] `bone_meal` is served but never announced
       — 1.8.9 had one `dye_powder_white` where modern has both `bone_meal` and `white_dye`, so both
       entries point at it. The forward direction is right and deliberate, but `TextureNameMaps.invert`

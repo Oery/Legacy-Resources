@@ -34,6 +34,8 @@ final class PackCorpus {
 
 	/** Identifier of the synthetic pack made from vanilla 1.8.9's own assets; see {@link #vanillaControl}. */
 	static final String CONTROL_ID = "__vanilla_1_8_9";
+	/** Identifier of the synthetic pack the targeted modern version's own assets are read through. */
+	private static final String MODERN_ASSETS_ID = "__vanilla_modern";
 
 	private final List<LabPack> packs;
 	private final List<Skipped> skipped;
@@ -54,6 +56,14 @@ final class PackCorpus {
 	static PackCorpus load(Path packsDirectory, Path projectDirectory) {
 		List<LabPack> packs = new ArrayList<>();
 		List<Skipped> skipped = new ArrayList<>();
+		Path modernAssets = existingDirectory(projectDirectory.resolve(VANILLA_MODERN_ASSETS));
+		// Before anything is opened: the conversion consults the targeted version's own assets to decide
+		// whether a pack's blockstates/models point at anything that still exists, and in the lab there is
+		// no running client whose built-in pack it could read that from.
+		LabPackAccess.useModernVanillaAssets(modernAssets == null ? null : new PathPackResources(
+			new PackLocationInfo(MODERN_ASSETS_ID, Component.literal(MODERN_ASSETS_ID), PackSource.BUILT_IN, Optional.empty()),
+			modernAssets
+		));
 		try (Stream<Path> entries = Files.list(packsDirectory)) {
 			List<Path> zips = entries
 				.filter(path -> path.getFileName().toString().endsWith(".zip"))
@@ -70,7 +80,6 @@ final class PackCorpus {
 		} catch (IOException e) {
 			throw new IllegalStateException("Cannot read resource pack folder " + packsDirectory, e);
 		}
-		Path modernAssets = existingDirectory(projectDirectory.resolve(VANILLA_MODERN_ASSETS));
 		return new PackCorpus(List.copyOf(packs), List.copyOf(skipped), vanillaControl(projectDirectory), modernAssets);
 	}
 

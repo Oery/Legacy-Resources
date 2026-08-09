@@ -6,11 +6,11 @@ import net.minecraft.server.packs.repository.Pack;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Lab-only access to the two package-private pieces of the conversion the derivation lab needs.
+ * Lab-only access to the package-private pieces of the conversion the derivation lab needs.
  * <p>
  * This class lives in the {@code lab} source set but declares the {@code convert} package, purely so
- * it can reach {@link LegacyPackDetector} and {@link LegacyPackResources} without either of them
- * having to become public API of the mod for a development harness's benefit. Nothing in the shipped
+ * it can reach {@link LegacyPackDetector}, {@link LegacyPackResources} and {@code ModernVanillaAssets}
+ * without any of them having to become public API of the mod for a development harness's benefit. Nothing in the shipped
  * jar sees this file - the {@code lab} source set is excluded from it (see {@code build.gradle}).
  */
 public final class LabPackAccess {
@@ -44,5 +44,16 @@ public final class LabPackAccess {
 	 */
 	public static PackResources convert(PackResources resources) {
 		return new LegacyPackResources(resources);
+	}
+
+	/**
+	 * Tells the conversion where the targeted version's own assets are, which in the lab is
+	 * {@code reference/26.2/assets} rather than a running client's built-in pack (there is no client
+	 * here at all). Must be called before any pack is converted, and with {@code null} when
+	 * {@code reference/} has not been regenerated - see {@code ModernVanillaAssets.useSource}, which
+	 * treats "no vanilla to consult" and "not wired up yet" as different states on purpose.
+	 */
+	public static void useModernVanillaAssets(@Nullable PackResources resources) {
+		ModernVanillaAssets.useSource(resources);
 	}
 }

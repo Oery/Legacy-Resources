@@ -2,6 +2,7 @@ package dev.oery.legacyresources.client.convert;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
 import dev.oery.legacyresources.LegacyResources;
@@ -190,6 +191,38 @@ public final class LegacyPackResources implements PackResources {
 	private static final String MODEL_BLOCK_DIR = "models/block/";
 	private static final String MODEL_ITEM_DIR = "models/item/";
 	private static final String BLOCKSTATES_DIR = "blockstates/";
+	private static final String MODEL_DIR = "models/";
+	/** The two JSON trees below, as {@link #listResources} is asked for them (no trailing slash). */
+	private static final String MODEL_ROOT = "models";
+	private static final String BLOCKSTATES_ROOT = "blockstates";
+	private static final String JSON_SUFFIX = ".json";
+	private static final String PNG_SUFFIX = ".png";
+	private static final String PARENT_KEY = "parent";
+	private static final String TEXTURES_KEY = "textures";
+	private static final String SPRITE_KEY = "sprite";
+	/** Marks a model texture entry as standing in for one an extending model fills in, not a sprite. */
+	private static final String TEXTURE_VARIABLE_PREFIX = "#";
+	/**
+	 * The one model reference with no file behind it that the game still answers itself: {@code
+	 * ItemModelGenerator}, registered as a special model by {@code ModelManager}. Legacy item models
+	 * are built on it (1.8's own {@code models/item/*.json} name it as their parent), so a resolvability
+	 * check that only looked for files would reject nearly every item model a legacy pack ships. Its
+	 * siblings from that era are <em>not</em> answered anymore - {@code builtin/entity} in particular,
+	 * whose blocks/items modern renders with dedicated renderers instead - so they are deliberately not
+	 * listed here.
+	 */
+	private static final Identifier GENERATED_ITEM_MODEL = Identifier.fromNamespaceAndPath("minecraft", "builtin/generated");
+	/**
+	 * 1.8 modelled the two lamp states as two separate blocks, so a legacy pack's own
+	 * {@code blockstates/redstone_lamp.json} points at nothing but the unlit model, with the lit one
+	 * reachable only through a {@code lit_redstone_lamp} blockstate modern never asks for. Converted
+	 * literally, that file is perfectly valid and renders a lamp that never lights up; the two models
+	 * the pack ships are instead recombined into modern's single {@code lit}-keyed block, the same way
+	 * {@link #computeBlockstate} already handles redstone torches.
+	 */
+	private static final String REDSTONE_LAMP_STEM = "redstone_lamp";
+	private static final String LIT_REDSTONE_LAMP_MODEL_STEM = "lit_redstone_lamp";
+	private static final String UNLIT_REDSTONE_LAMP_MODEL_STEM = "unlit_redstone_lamp";
 	/**
 	 * Vanilla's {@code redstone_dust_dot.png} is a small (verified empirically: a 6x6 blob at
 	 * pixels 5,5 to 11,11) accent centered on an otherwise fully transparent 16x16 canvas - the
@@ -314,6 +347,13 @@ public final class LegacyPackResources implements PackResources {
 	 * within a single {@link #getResource} call chain, i.e. on one thread.
 	 */
 	private final ThreadLocal<Set<String>> deriving = ThreadLocal.withInitial(HashSet::new);
+	/**
+	 * Models whose resolvability is currently being decided on this thread, so a pack whose model
+	 * declares itself (directly or through a chain) as its own parent cannot recurse forever - see
+	 * {@link #modelResolves}. Same reasoning as {@link #deriving}: the cycle would be within a single
+	 * {@link #getResource} call chain, i.e. on one thread.
+	 */
+	private final ThreadLocal<Set<Identifier>> resolvingModels = ThreadLocal.withInitial(HashSet::new);
 
 	LegacyPackResources(PackResources delegate) {
 		this.delegate = delegate;
@@ -512,14 +552,24 @@ public final class LegacyPackResources implements PackResources {
 				announceComputedModel(namespace, stem, output);
 			}
 		}
-		if (isOrUnder(directory, "models/block") || isOrUnder(directory, "models/item") || isOrUnder(directory, "blockstates")) {
+		if (jsonTreeQueried(directory, MODEL_ROOT) || jsonTreeQueried(directory, BLOCKSTATES_ROOT)) {
+			// Models and blockstates only ever reach the game through listing - ModelManager and
+			// BlockStateModelLoader each scan their whole tree in one go (FileToIdConverter.json("models")
+			// and ("blockstates")) and never ask getResource for an individual file - so every decision
+			// getResource makes about them has to be made here too, or it is made for nobody. Routing the
+			// listing through getResource itself is what keeps the two in sync: a file it converts is
+			// announced converted, and a file it refuses (an unconvertible blockstate, a model whose
+			// parent is gone, the pack's own old-scheme redstone_wire) is not announced at all, which is
+			// precisely how vanilla's own file stays in play.
+			//
+			// Note the query is for the tree root ("models"), not for "models/block" - which is why
+			// jsonTreeQueried has to test the containment relationship in both directions. The narrower
+			// forms are handled too, since nothing guarantees a caller asks the way vanilla does.
 			delegate.listResources(type, namespace, directory, (id, supplier) -> {
-				// Keep in sync with the redstone_wire skip in computeBlockstate: the pack's own
-				// old-scheme blockstate must never surface, from listing either.
-				if (id.getPath().equals(BLOCKSTATES_DIR + "redstone_wire.json")) {
-					return;
+				IoSupplier<InputStream> converted = getResource(PackType.CLIENT_RESOURCES, id);
+				if (converted != null) {
+					output.accept(id, converted);
 				}
-				output.accept(id, rewriteJsonSupplier(id, supplier));
 			});
 			return;
 		}
@@ -1229,9 +1279,30 @@ public final class LegacyPackResources implements PackResources {
 		g.drawImage(source, dx + w, dy + h, dx, dy, sx, sy, sx + w, sy + h, null);
 	}
 
+	/**
+	 * Deliberately not a {@code computeIfAbsent}: converting a blockstate asks whether the models it
+	 * names resolve, and converting a model asks the same of its parent, so a computation here
+	 * routinely runs {@link #getResource} - and therefore this method - again for other keys. A
+	 * {@link ConcurrentHashMap} forbids exactly that ("the mapping function must not modify this map"),
+	 * answering with an {@code IllegalStateException} or a livelock rather than the model. Computing
+	 * first and then publishing costs a duplicated conversion when two threads race on one file, which
+	 * is harmless: the result is a pure function of the pack.
+	 * <p>
+	 * A {@code null} result (this pack has nothing to say about {@code location}) is not cached, so a
+	 * miss is re-derived on every ask.
+	 */
 	private @Nullable IoSupplier<InputStream> resolveJson(Identifier location, Supplier<byte[]> compute) {
-		byte[] cached = jsonCache.computeIfAbsent(location, loc -> compute.get());
-		return cached == null ? null : () -> new ByteArrayInputStream(cached);
+		byte[] cached = jsonCache.get(location);
+		if (cached == null) {
+			byte[] computed = compute.get();
+			if (computed == null) {
+				return null;
+			}
+			byte[] published = jsonCache.putIfAbsent(location, computed);
+			cached = published != null ? published : computed;
+		}
+		byte[] bytes = cached;
+		return () -> new ByteArrayInputStream(bytes);
 	}
 
 	/**
@@ -1320,9 +1391,8 @@ public final class LegacyPackResources implements PackResources {
 	}
 
 	private byte @Nullable [] computeBlockModel(Identifier location, String stem) {
-		byte[] rewritten = tryRewriteJson(location);
-		if (rewritten != null) {
-			return rewritten;
+		if (packHas(location)) {
+			return tryRewriteModel(location);
 		}
 		String namespace = location.getNamespace();
 		if (NO_GENERIC_FALLBACK_MODEL_STEMS.contains(stem)) {
@@ -1366,9 +1436,8 @@ public final class LegacyPackResources implements PackResources {
 	}
 
 	private byte @Nullable [] computeItemModel(Identifier location, String stem) {
-		byte[] rewritten = tryRewriteJson(location);
-		if (rewritten != null) {
-			return rewritten;
+		if (packHas(location)) {
+			return tryRewriteModel(location);
 		}
 		String namespace = location.getNamespace();
 		if (textureResolves(namespace, NEW_ITEM_TEXTURE_DIR, stem)) {
@@ -1388,24 +1457,28 @@ public final class LegacyPackResources implements PackResources {
 	 * {@code multipart}/{@code redstone_dust_dot}+{@code redstone_dust_side0/1} system; none of
 	 * those old named models exist in modern vanilla assets anymore. A legacy pack that ships its
 	 * own {@code blockstates/redstone_wire.json} (common even for texture-focused packs, since many
-	 * are built by copying the vanilla asset tree) would otherwise have that old-scheme file passed
-	 * straight through by {@link #tryRewriteJson} - {@link JsonRewriter} only rewrites
-	 * {@code "blocks/"}/{@code "items/"} texture-path prefixes, not bare model names like
-	 * {@code "redstone_n"} - leaving most connectivity states pointing at models that no longer
-	 * exist anywhere, i.e. missing-texture/checkerboard. There's no way to honor that old scheme
-	 * against modern's asset layout, so always defer to vanilla's own (current) blockstate and
-	 * models here; only the {@code redstone_dust_dot}/{@code redstone_dust_line0}/
+	 * are built by copying the vanilla asset tree) names its connectivity properties exactly as modern
+	 * still does ({@code north}/{@code east}/{@code south}/{@code west} of {@code up}/{@code side}/
+	 * {@code none}), so {@link BlockstateConverter} would find nothing wrong with the file and hand the
+	 * game ~35 model references that resolve nowhere - i.e. missing-texture/checkerboard. There's no way
+	 * to honor that old scheme against modern's asset layout, so always defer to vanilla's own (current)
+	 * blockstate and models here; only the {@code redstone_dust_dot}/{@code redstone_dust_line0}/
 	 * {@code redstone_dust_line1} textures get remapped, via {@link #resolveTexture}.
 	 */
 	private byte @Nullable [] computeBlockstate(Identifier location, String stem) {
 		if (stem.equals("redstone_wire")) {
 			return null;
 		}
-		byte[] rewritten = tryRewriteJson(location);
-		if (rewritten != null) {
-			return rewritten;
-		}
 		String namespace = location.getNamespace();
+		if (stem.equals(REDSTONE_LAMP_STEM)) {
+			byte[] lamp = redstoneLampBlockstate(namespace);
+			if (lamp != null) {
+				return lamp;
+			}
+		}
+		if (packHas(location)) {
+			return tryConvertBlockstate(location, stem);
+		}
 		if (stem.equals("redstone_torch") || stem.equals("redstone_wall_torch")) {
 			String unlitStem = stem + "_off";
 			if (!blockModelResolves(namespace, stem) || !blockModelResolves(namespace, unlitStem)) {
@@ -1431,16 +1504,222 @@ public final class LegacyPackResources implements PackResources {
 		return resolveJson(modelLocation, () -> computeBlockModel(modelLocation, stem)) != null;
 	}
 
-	private byte @Nullable [] tryRewriteJson(Identifier location) {
+	/**
+	 * Recombines the pack's own two lamp models into modern's single {@code lit}-keyed block; see
+	 * {@link #REDSTONE_LAMP_STEM}. Both models have to come from the pack itself - a pack that
+	 * customizes neither has no business overriding vanilla's blockstate, and one that ships only the
+	 * unlit model is better served by the general conversion, which will at least keep that half.
+	 */
+	private byte @Nullable [] redstoneLampBlockstate(String namespace) {
+		if (!packBlockModelExists(namespace, LIT_REDSTONE_LAMP_MODEL_STEM)
+			|| !packBlockModelExists(namespace, UNLIT_REDSTONE_LAMP_MODEL_STEM)) {
+			return null;
+		}
+		return FallbackModelGenerator.litUnlitBlockstate(namespace, LIT_REDSTONE_LAMP_MODEL_STEM, UNLIT_REDSTONE_LAMP_MODEL_STEM);
+	}
+
+	/** Converts the pack's own blockstate for {@code stem}, or {@code null} to leave vanilla's standing. */
+	private byte @Nullable [] tryConvertBlockstate(Identifier location, String stem) {
+		JsonElement parsed = readJson(location);
+		if (parsed == null) {
+			return null;
+		}
+		JsonObject converted = BlockstateConverter.convert(location.getNamespace(), stem, parsed, this::modelResolves);
+		if (converted == null) {
+			// Not a warning: a pack that describes blocks in terms modern no longer has is doing nothing
+			// wrong, and every such file is one vanilla still has a working answer for.
+			LegacyResources.LOGGER.debug("Deferring to vanilla for {} in legacy pack {}", location, location().id());
+			return null;
+		}
+		return GSON.toJson(converted).getBytes(StandardCharsets.UTF_8);
+	}
+
+	/**
+	 * Rewrites a model's texture references, and rejects the model outright if anything it names - its
+	 * {@code parent}, or any of its textures - no longer resolves.
+	 * <p>
+	 * The rejection matters as much as the rewriting, because modern answers a dangling reference with
+	 * the missing model or the missing sprite (pink and black) rather than by falling back to the file
+	 * being overridden. Both halves happen constantly in a legacy pack:
+	 * <ul>
+	 *   <li>Item models extend parents the flattening deleted - {@code block/hopper_down},
+	 *   {@code item/iron_door_item}, the whole {@code *_pane_ns} family.</li>
+	 *   <li>Block models name textures the pack doesn't actually ship, harmlessly in their own version
+	 *   because the model was never reached there (its block had another name), but not harmlessly here,
+	 *   where a stem like {@code purpur_pillar} or {@code quartz_pillar} happens to be exactly what
+	 *   modern vanilla's own blockstate asks for.</li>
+	 * </ul>
+	 * Refusing to serve the file gets vanilla's own model back instead, which the pack's textures still
+	 * reach through the rest of this mod.
+	 */
+	private byte @Nullable [] tryRewriteModel(Identifier location) {
+		JsonElement parsed = readJson(location);
+		if (parsed == null || !parsed.isJsonObject()) {
+			return null;
+		}
+		JsonObject model = JsonRewriter.rewrite(parsed).getAsJsonObject();
+		JsonElement parent = model.get(PARENT_KEY);
+		if (parent != null) {
+			if (!parent.isJsonPrimitive() || !parent.getAsJsonPrimitive().isString()) {
+				return null;
+			}
+			// Identifier.tryParse, not this mod's own resolution rules: model parents are the one place
+			// where the legacy and modern readings of a reference already agree, both defaulting the
+			// namespace to minecraft and treating the path as relative to models/.
+			Identifier parentId = Identifier.tryParse(parent.getAsString());
+			if (parentId == null || !modelResolves(parentId)) {
+				LegacyResources.LOGGER.debug(
+					"Deferring to vanilla for {} in legacy pack {}: parent {} is gone", location, location().id(), parent.getAsString()
+				);
+				return null;
+			}
+		}
+		JsonElement textures = model.get(TEXTURES_KEY);
+		if (textures != null) {
+			if (!textures.isJsonObject()) {
+				return null;
+			}
+			for (Map.Entry<String, JsonElement> texture : textures.getAsJsonObject().entrySet()) {
+				if (!spriteResolves(texture.getValue())) {
+					LegacyResources.LOGGER.debug(
+						"Deferring to vanilla for {} in legacy pack {}: texture {} is gone", location, location().id(), texture.getKey()
+					);
+					return null;
+				}
+			}
+		}
+		if (parent == null && !bindsEveryTextureVariable(model) && ModernVanillaAssets.has(location)) {
+			LegacyResources.LOGGER.debug(
+				"Deferring to vanilla for {} in legacy pack {}: template shadowing a finished model", location, location().id()
+			);
+			return null;
+		}
+		return GSON.toJson(model).getBytes(StandardCharsets.UTF_8);
+	}
+
+	/**
+	 * Whether the model binds every {@code #variable} it uses, i.e. is renderable on its own rather than
+	 * geometry waiting for someone to supply the textures.
+	 * <p>
+	 * The two eras split their models at different points, and where the names collide the difference is
+	 * fatal. 1.8's {@code models/block/torch.json} is nothing but geometry over an unbound
+	 * {@code #torch}, with {@code normal_torch.json} extending it to bind the texture; modern made
+	 * {@code block/torch} the finished model and {@code block/template_torch} the geometry. Serving the
+	 * legacy file under that name hands vanilla's blockstate a model whose every face is textureless -
+	 * a pink torch. Every pack that copied 1.8's asset tree wholesale carries dozens of these collisions
+	 * (anvil, button, carpet, crop, torch, ...).
+	 * <p>
+	 * Only a model with no parent is judged this way (one with a parent is entitled to inherit the
+	 * bindings), and only when modern ships a model of the same name - a template under a name modern
+	 * never asks for is unreachable except through the pack's own models, which do bind it.
+	 */
+	private static boolean bindsEveryTextureVariable(JsonObject model) {
+		JsonElement textures = model.get(TEXTURES_KEY);
+		Set<String> bound = textures != null && textures.isJsonObject() ? textures.getAsJsonObject().keySet() : Set.of();
+		Set<String> used = new HashSet<>();
+		collectTextureVariables(model, used);
+		return bound.containsAll(used);
+	}
+
+	private static void collectTextureVariables(JsonElement element, Set<String> out) {
+		if (element.isJsonObject()) {
+			for (Map.Entry<String, JsonElement> entry : element.getAsJsonObject().entrySet()) {
+				collectTextureVariables(entry.getValue(), out);
+			}
+		} else if (element.isJsonArray()) {
+			element.getAsJsonArray().forEach(child -> collectTextureVariables(child, out));
+		} else if (element.isJsonPrimitive() && element.getAsJsonPrimitive().isString()) {
+			String value = element.getAsString();
+			if (value.startsWith(TEXTURE_VARIABLE_PREFIX)) {
+				out.add(value.substring(TEXTURE_VARIABLE_PREFIX.length()));
+			}
+		}
+	}
+
+	/**
+	 * Whether one entry of a model's {@code textures} map points at a sprite that exists. A {@code #name}
+	 * value is a reference to another entry filled in by whoever extends the model rather than a sprite
+	 * of its own, so it is nothing to check.
+	 */
+	private boolean spriteResolves(JsonElement texture) {
+		String reference;
+		if (texture.isJsonObject()) {
+			// The object form ({"sprite": ..., "force_translucent": true}); no legacy pack writes it, but
+			// this mod's own generated models do, and they pass back through here.
+			JsonElement sprite = texture.getAsJsonObject().get(SPRITE_KEY);
+			if (sprite == null || !sprite.isJsonPrimitive() || !sprite.getAsJsonPrimitive().isString()) {
+				return false;
+			}
+			reference = sprite.getAsString();
+		} else if (texture.isJsonPrimitive() && texture.getAsJsonPrimitive().isString()) {
+			reference = texture.getAsString();
+		} else {
+			return false;
+		}
+		if (reference.startsWith(TEXTURE_VARIABLE_PREFIX)) {
+			return true;
+		}
+		Identifier sprite = Identifier.tryParse(reference);
+		if (sprite == null) {
+			return false;
+		}
+		Identifier file = sprite.withPath(TEXTURE_DIR + sprite.getPath() + PNG_SUFFIX);
+		return getResource(PackType.CLIENT_RESOURCES, file) != null || ModernVanillaAssets.has(file);
+	}
+
+	/**
+	 * Whether {@code modelId} (e.g. {@code minecraft:block/cobblestone}) can be loaded at all - from
+	 * this pack, converted, or from the vanilla assets underneath it. This is the question that decides
+	 * whether a converted blockstate or model is worth serving, so it has to be asked the same way the
+	 * game will: against both layers, since a legacy pack leans on vanilla for every model it doesn't
+	 * ship itself.
+	 */
+	private boolean modelResolves(Identifier modelId) {
+		if (modelId.equals(GENERATED_ITEM_MODEL)) {
+			return true;
+		}
+		Identifier file = modelId.withPath(MODEL_DIR + modelId.getPath() + JSON_SUFFIX);
+		Set<Identifier> resolving = resolvingModels.get();
+		if (!resolving.add(file)) {
+			// Already being decided further up this call chain, i.e. the parent chain loops back on
+			// itself. Nothing downstream can make that resolvable.
+			return false;
+		}
+		try {
+			return getResource(PackType.CLIENT_RESOURCES, file) != null || ModernVanillaAssets.has(file);
+		} finally {
+			resolving.remove(file);
+		}
+	}
+
+	/** Whether the pack itself ships {@code models/block/<stem>.json}, ignoring what could be synthesized for it. */
+	private boolean packBlockModelExists(String namespace, String stem) {
+		return packHas(Identifier.fromNamespaceAndPath(namespace, MODEL_BLOCK_DIR + stem + JSON_SUFFIX));
+	}
+
+	/**
+	 * Whether the pack has a file of its own at {@code location} (asked of the pack directly, so nothing
+	 * this class computes counts).
+	 * <p>
+	 * Where the pack does, that file's conversion is the whole answer: converted if it converts, and
+	 * otherwise vanilla's, never a synthesized stand-in. The fallback generators exist for what a pack
+	 * <em>doesn't</em> ship - a texture-only pack, or a block whose model/blockstate the flattening split
+	 * up - and second-guessing a file the pack did author would let a refused blockstate come back as a
+	 * plain cube, which for a slab or a wall is a worse answer than vanilla's own shape.
+	 */
+	private boolean packHas(Identifier location) {
+		return delegate.getResource(PackType.CLIENT_RESOURCES, location) != null;
+	}
+
+	private @Nullable JsonElement readJson(Identifier location) {
 		IoSupplier<InputStream> direct = delegate.getResource(PackType.CLIENT_RESOURCES, location);
 		if (direct == null) {
 			return null;
 		}
 		try (InputStream in = direct.get()) {
-			JsonElement parsed = JsonParser.parseReader(new InputStreamReader(in, StandardCharsets.UTF_8));
-			return GSON.toJson(JsonRewriter.rewrite(parsed)).getBytes(StandardCharsets.UTF_8);
+			return JsonParser.parseReader(new InputStreamReader(in, StandardCharsets.UTF_8));
 		} catch (IOException | JsonParseException e) {
-			LegacyResources.LOGGER.warn("Failed to convert {} in legacy pack {}", location, location().id(), e);
+			LegacyResources.LOGGER.warn("Failed to read {} in legacy pack {}", location, location().id(), e);
 			return null;
 		}
 	}
@@ -1448,17 +1727,6 @@ public final class LegacyPackResources implements PackResources {
 	private boolean textureResolves(String namespace, String newDirectory, String stem) {
 		String oldPath = translateTexturePath(newDirectory + stem + ".png");
 		return oldPath != null && delegate.getResource(PackType.CLIENT_RESOURCES, Identifier.fromNamespaceAndPath(namespace, oldPath)) != null;
-	}
-
-	private IoSupplier<InputStream> rewriteJsonSupplier(Identifier id, IoSupplier<InputStream> original) {
-		return () -> {
-			try (InputStream in = original.get()) {
-				JsonElement parsed = JsonParser.parseReader(new InputStreamReader(in, StandardCharsets.UTF_8));
-				return new ByteArrayInputStream(GSON.toJson(JsonRewriter.rewrite(parsed)).getBytes(StandardCharsets.UTF_8));
-			} catch (JsonParseException e) {
-				throw new IOException("Failed to convert " + id + " in legacy pack " + location().id(), e);
-			}
-		};
 	}
 
 	private boolean compassSourceExists() {
@@ -1556,6 +1824,11 @@ public final class LegacyPackResources implements PackResources {
 	/** The inverse relationship to {@link #isOrUnder}: does the queried {@code directory} contain {@code target}? */
 	private static boolean directoryCovers(String directory, String target) {
 		return directory.equals(target) || target.startsWith(directory + "/");
+	}
+
+	/** Whether a {@code directory} query touches the {@code root} tree at all, from either direction. */
+	private static boolean jsonTreeQueried(String directory, String root) {
+		return isOrUnder(directory, root) || directoryCovers(directory, root);
 	}
 
 	private static @Nullable Identifier translateListed(Identifier oldId, String oldDir, String newDir, UnaryOperator<String> nameMap) {
