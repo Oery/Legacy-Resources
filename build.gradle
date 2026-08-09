@@ -18,7 +18,7 @@ loom {
 	splitEnvironmentSourceSets()
 
 	mods {
-		"any-resource" {
+		"legacy-resources" {
 			sourceSet sourceSets.main
 			sourceSet sourceSets.client
 		}
@@ -35,7 +35,7 @@ dependencies {
 }
 
 // The derivation lab: a local web UI for tuning the texture derivations in
-// dev.oery.anyresource.client.derive against every legacy pack in ~/.minecraft/resourcepacks at once.
+// dev.oery.legacyresources.client.derive against every legacy pack in ~/.minecraft/resourcepacks at once.
 // See src/lab/java/.../lab/LabServer.java. It is a development harness only - deliberately its own
 // source set, absent from the loom { mods { ... } } block above and from the jar, so none of it can
 // reach the published mod. It does sit on the client source set's classpath, because it drives the
@@ -48,10 +48,10 @@ sourceSets {
 }
 
 tasks.register('runLab', JavaExec) {
-	group = 'any-resource'
+	group = 'legacy-resources'
 	description = 'Runs the derivation lab at http://localhost:8642'
 	classpath = sourceSets.lab.runtimeClasspath
-	mainClass = 'dev.oery.anyresource.lab.LabServer'
+	mainClass = 'dev.oery.legacyresources.lab.LabServer'
 	// The lab reads its web assets, the derivation sources it recompiles, and reference/ straight off
 	// disk rather than from the classpath, so that editing any of them takes effect on a page refresh.
 	systemProperty 'lab.project', projectDir.absolutePath

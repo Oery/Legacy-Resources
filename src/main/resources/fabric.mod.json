@@ -1,27 +1,27 @@
 {
 	"schemaVersion": 1,
-	"id": "any-resource",
+	"id": "legacy-resources",
 	"version": "${version}",
-	"name": "Any Resource",
+	"name": "Legacy Resources",
 	"description": "Lets legacy 1.6-1.12 resource packs load in modern Minecraft by converting their textures, models and blockstates on the fly.",
 	"authors": [
 		"oery"
 	],
 	"contact": {},
 	"license": "CC0-1.0",
-	"icon": "assets/any-resource/icon.png",
+	"icon": "assets/legacy-resources/icon.png",
 	"environment": "*",
 	"entrypoints": {
 		"main": [
-			"dev.oery.anyresource.AnyResource"
+			"dev.oery.legacyresources.LegacyResources"
 		],
 		"client": [
-			"dev.oery.anyresource.client.AnyResourceClient"
+			"dev.oery.legacyresources.client.LegacyResourcesClient"
 		]
 	},
 	"mixins": [
 		{
-			"config": "any-resource.client.mixins.json",
+			"config": "legacy-resources.client.mixins.json",
 			"environment": "client"
 		}
 	],

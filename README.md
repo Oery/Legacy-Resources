@@ -1,4 +1,4 @@
-# Any Resource
+# Legacy Resources
 
 ## Setup
 
