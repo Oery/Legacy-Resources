@@ -1,6 +1,10 @@
 // Derivation lab front end. No framework and no build step on purpose: the page is served straight
 // off disk by LabServer, so editing this file and refreshing is the whole edit loop.
 
+/** Tiles per row before a card's source / derived column wraps, so one card cannot span the page. */
+const SOURCE_COLUMNS = 4;
+const OUTPUT_COLUMNS = 4;
+
 const state = {
 	derivations: [],
 	current: null,
@@ -147,6 +151,14 @@ function paint(data) {
 		el.controlNote.textContent = 'No control - reference/1.8.9/assets is missing.';
 	}
 
+	// Cards are as wide as their two columns of tiles, and both counts vary per derivation (netherite
+	// armour reads 7 sources, suspicious gravel 11). Feeding the counts to CSS keeps the grid packing
+	// as tightly as the current derivation allows instead of to one hardcoded guess.
+	const showSources = document.getElementById('show-sources').checked;
+	const style = document.documentElement.style;
+	style.setProperty('--source-columns', String(showSources ? Math.min(SOURCE_COLUMNS, data.sources.length) : 0));
+	style.setProperty('--output-columns', String(Math.min(OUTPUT_COLUMNS, data.outputs.length)));
+
 	el.grid.innerHTML = '';
 	for (const pack of packs) {
 		el.grid.append(card(pack, data.outputs, data.sources));
@@ -180,14 +192,25 @@ function card(pack, outputs, sources) {
 		+ `<span class="card-res">${pack.resolution ? pack.resolution + 'px' : '&mdash;'}</span>`;
 	node.append(head);
 
-	const strip = document.createElement('div');
-	strip.className = 'strip';
-	for (const path of outputs) {
-		// No caption here, only a hover title: the outputs are in declared order and repeat on every
-		// card, so labelling all of them costs a third of the packs per row to say nothing.
-		strip.append(tile(pack.outputs?.[path], '', { pack: pack.id, path, derived: true }, shortName(path)));
+	// Source art on the left, what the derivation made of it on the right. Judging a derivation means
+	// judging the transform, not the output alone - whether a pack came out dark because the
+	// constants are wrong or because its own art was already dark is invisible without the input
+	// next to it.
+	const body = document.createElement('div');
+	body.className = 'card-body';
+	if (document.getElementById('show-sources').checked) {
+		body.append(group('source', sources, (path) => tile(
+			pack.sources?.[path], '', { pack: pack.id, path }, shortName(path),
+		)));
 	}
-	node.append(strip);
+	body.append(group('derived', outputs, (path) => tile(
+		// No caption, only a hover title: the outputs are in declared order and repeat on every card,
+		// so labelling each one costs packs per row to say nothing.
+		pack.outputs?.[path], '', { pack: pack.id, path, derived: true }, shortName(path),
+	)));
+	node.append(body);
+	// Which column is which is stated once in the sidebar legend rather than on all sixty cards; per
+	// card it was a whole text row of vertical space to repeat something the layout already says.
 
 	if (pack.error) {
 		const note = document.createElement('div');
@@ -200,15 +223,17 @@ function card(pack, outputs, sources) {
 		note.textContent = `missing ${pack.missing.map(shortName).join(', ')}`;
 		node.append(note);
 	}
+	return node;
+}
 
-	if (document.getElementById('show-sources').checked) {
-		const strip = document.createElement('div');
-		strip.className = 'strip card-sources';
-		for (const path of sources) {
-			strip.append(tile(pack.sources?.[path], shortName(path), { pack: pack.id, path }));
-		}
-		node.append(strip);
-	}
+/** One column of tiles within a card. */
+function group(label, paths, build) {
+	const node = document.createElement('div');
+	node.className = `group group-${label}`;
+	const strip = document.createElement('div');
+	strip.className = 'strip';
+	for (const path of paths) strip.append(build(path));
+	node.append(strip);
 	return node;
 }
 

@@ -8,17 +8,21 @@
 	--dim: #949aa6;
 	--accent: #7cc4ff;
 	--bad: #ff8f6b;
-	--tile: 48px;
+	/* Card area is dominated by tiles, not chrome - eight 48px tiles are 384px of a 419px card - so
+	   this, not padding, is the control that decides how many packs fit on screen. */
+	--tile: 36px;
 	color-scheme: dark;
 }
 
-* { box-sizing: border-box; }
+* {
+	box-sizing: border-box;
+}
 
 body {
 	margin: 0;
 	background: var(--bg);
 	color: var(--text);
-	font: 13px/1.5 ui-sans-serif, system-ui, sans-serif;
+	font: 13px / 1.5 ui-sans-serif, system-ui, sans-serif;
 }
 
 header {
@@ -33,11 +37,32 @@ header {
 	z-index: 5;
 }
 
-h1 { font-size: 14px; margin: 0; letter-spacing: .02em; }
-h2 { font-size: 11px; margin: 0 0 8px; text-transform: uppercase; letter-spacing: .08em; color: var(--dim); }
-h2 small { text-transform: none; letter-spacing: 0; font-weight: 400; opacity: .7; }
+h1 {
+	font-size: 14px;
+	margin: 0;
+	letter-spacing: .02em;
+}
 
-.status { margin-left: auto; color: var(--dim); font-variant-numeric: tabular-nums; }
+h2 {
+	font-size: 11px;
+	margin: 0 0 8px;
+	text-transform: uppercase;
+	letter-spacing: .08em;
+	color: var(--dim);
+}
+
+h2 small {
+	text-transform: none;
+	letter-spacing: 0;
+	font-weight: 400;
+	opacity: 0.7;
+}
+
+.status {
+	margin-left: auto;
+	color: var(--dim);
+	font-variant-numeric: tabular-nums;
+}
 
 .banner {
 	padding: 10px 16px;
@@ -49,7 +74,10 @@ h2 small { text-transform: none; letter-spacing: 0; font-weight: 400; opacity: .
 	font-size: 12px;
 }
 
-main { display: flex; align-items: flex-start; }
+main {
+	display: flex;
+	align-items: flex-start;
+}
 
 aside {
 	width: 300px;
@@ -62,39 +90,98 @@ aside {
 	overflow-y: auto;
 }
 
-aside section { margin-bottom: 24px; }
+aside section {
+	margin-bottom: 24px;
+}
 
-.field { display: flex; align-items: center; gap: 8px; }
-.field > span { color: var(--dim); }
-.check { display: block; color: var(--dim); margin-top: 6px; }
-select, button, input[type=number] {
+.field {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.field > span {
+	color: var(--dim);
+}
+
+.check {
+	display: block;
+	color: var(--dim);
+	margin-top: 6px;
+}
+
+select,
+button,
+input[type="number"] {
 	background: var(--panel);
 	color: var(--text);
 	border: 1px solid var(--line);
 	border-radius: 5px;
-	padding: 4px 8px;
+	/* padding: 4px 8px; */
 	font: inherit;
 }
-button { cursor: pointer; }
-button:hover { border-color: var(--accent); }
+
+button {
+	cursor: pointer;
+}
+
+button:hover {
+	border-color: var(--accent);
+}
 
 /* Sliders ---------------------------------------------------------------- */
-.param { margin-bottom: 12px; }
-.param-head { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
-.param-head code { font-size: 12px; }
-.param-head input { width: 74px; text-align: right; font-variant-numeric: tabular-nums; }
-.param input[type=range] { width: 100%; margin: 2px 0 0; }
-.param.changed code { color: var(--accent); }
+.param {
+	margin-bottom: 12px;
+}
 
-.actions { display: flex; gap: 8px; margin-top: 12px; }
+.param-head {
+	display: flex;
+	justify-content: space-between;
+	gap: 8px;
+	align-items: baseline;
+}
+
+.param-head code {
+	font-size: 12px;
+}
+
+.param-head input {
+	width: 74px;
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+}
+
+.param input[type="range"] {
+	width: 100%;
+	margin: 2px 0 0;
+}
+
+.param.changed code {
+	color: var(--accent);
+}
+
+.actions {
+	display: flex;
+	gap: 8px;
+	margin-top: 12px;
+}
 
 /* Image strips and the pack grid ----------------------------------------- */
-.strip { display: flex; flex-wrap: wrap; gap: 4px; }
+.strip {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 2px;
+}
 
 /* Width is pinned to the tile so a caption can never be what decides how wide a card is - the
    output names are three times the width of a 48px thumbnail, and letting them size the card cost
    about half the packs per row. */
-.tile { position: relative; cursor: zoom-in; width: var(--tile); }
+.tile {
+	position: relative;
+	cursor: zoom-in;
+	width: var(--tile);
+}
+
 .tile img {
 	display: block;
 	width: var(--tile);
@@ -104,9 +191,11 @@ button:hover { border-color: var(--accent); }
 	max-height: calc(var(--tile) * 2);
 	object-fit: contain;
 	image-rendering: pixelated;
-	background: repeating-conic-gradient(#2a2d33 0 25%, #23262b 0 50%) 0 0 / 12px 12px;
+	background: repeating-conic-gradient(#2a2d33 0 25%, #23262b 0 50%) 0 0 / 12px
+		12px;
 	border-radius: 3px;
 }
+
 .tile figcaption {
 	font-size: 10px;
 	color: var(--dim);
@@ -116,38 +205,125 @@ button:hover { border-color: var(--accent); }
 	overflow: hidden;
 	text-overflow: ellipsis;
 }
-.tile figcaption:empty { display: none; }
-.tile.blank img { opacity: .25; }
+
+.tile figcaption:empty {
+	display: none;
+}
+
+.tile.blank img {
+	opacity: 0.25;
+}
 
 .grid {
 	flex: 1;
 	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(calc(var(--tile) * 4 + 26px), 1fr));
-	gap: 8px;
-	padding: 12px;
+	/* Sized from the two tile columns the current derivation actually needs; app.js sets the counts. */
+	/* The constant covers everything that is not a tile: card padding and border, the gap and divider
+	   between the two columns, and the 2px gaps within each strip. */
+	grid-template-columns: repeat(
+			auto-fill,
+			minmax(
+				calc(
+					var(--tile) *
+					(var(--source-columns, 0) + var(--output-columns, 4))
+					/*  + 36px */
+				),
+				1fr
+			)
+		);
+	gap: 5px;
+	padding: 8px;
 	align-content: start;
+}
+
+/* Source art beside what the derivation made of it ---------------------- */
+.card-body {
+	display: flex;
+	/* gap: 6px; */
+	align-items: flex-start;
+}
+
+/* Pinning each column to its tile count is what makes the strips wrap in step rather than one
+   column stealing the row and pushing the other out of alignment. */
+.group-source {
+	width: calc(
+		var(--tile) *
+		var(--source-columns) +
+		2px *
+		(var(--source-columns) - 1)
+	);
+	flex: none;
+	/* padding-right: 6px; */
+	border-right: 1px solid var(--line);
+}
+
+.group-source .tile img {
+	opacity: 0.8;
+}
+
+.group-derived {
+	width: calc(
+		var(--tile) *
+		var(--output-columns) +
+		2px *
+		(var(--output-columns) - 1)
+	);
+	flex: none;
 }
 
 .card {
 	background: var(--panel);
 	border: 1px solid var(--line);
-	border-radius: 6px;
-	padding: 6px;
+	border-radius: 5px;
+	padding: 4px;
 }
-.card.incomplete { opacity: .55; }
-.card-head { display: flex; gap: 6px; align-items: baseline; margin-bottom: 5px; }
+
+.card.incomplete {
+	opacity: 0.55;
+}
+
+.card-head {
+	display: flex;
+	gap: 5px;
+	align-items: baseline;
+	margin-bottom: 3px;
+	line-height: 1.25;
+}
+
 .card-name {
-	font-size: 11px;
+	font-size: 10px;
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
 }
-.card-res { margin-left: auto; color: var(--dim); font-size: 10px; flex: none; }
-.card-note { color: var(--bad); font-size: 10px; margin-top: 4px; word-break: break-word; }
-.card-sources { margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--line); }
 
-.skipped { margin: 0; padding-left: 16px; color: var(--dim); font-size: 11px; }
-.hint { color: var(--dim); font-size: 11px; margin: 6px 0 0; }
+.card-res {
+	/* margin-left: auto; */
+	color: var(--dim);
+	font-size: 9px;
+	flex: none;
+}
+
+.card-note {
+	color: var(--bad);
+	font-size: 9px;
+	margin-top: 3px;
+	line-height: 1.3;
+	word-break: break-word;
+}
+
+.skipped {
+	margin: 0;
+	padding-left: 16px;
+	color: var(--dim);
+	font-size: 11px;
+}
+
+.hint {
+	color: var(--dim);
+	font-size: 11px;
+	margin: 6px 0 0;
+}
 
 /* Full-resolution viewer -------------------------------------------------- */
 .viewer {
@@ -162,11 +338,20 @@ button:hover { border-color: var(--accent); }
 
 /* Needed because `display: grid` above outranks the browser's own
    `[hidden] { display: none }` - without it the overlay never hides and sits over the whole page. */
-.viewer[hidden] { display: none; }
+.viewer[hidden] {
+	display: none;
+}
+
 .viewer img {
 	width: min(70vh, 70vw);
 	height: min(70vh, 70vw);
 	image-rendering: pixelated;
-	background: repeating-conic-gradient(#2a2d33 0 25%, #23262b 0 50%) 0 0 / 24px 24px;
+	background: repeating-conic-gradient(#2a2d33 0 25%, #23262b 0 50%) 0 0 / 24px
+		24px;
 }
-.viewer figcaption { text-align: center; color: var(--dim); margin-top: 8px; }
+
+.viewer figcaption {
+	text-align: center;
+	color: var(--dim);
+	margin-top: 8px;
+}
