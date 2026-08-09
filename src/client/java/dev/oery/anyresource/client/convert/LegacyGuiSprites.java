@@ -113,7 +113,8 @@ final class LegacyGuiSprites {
 
 	enum Sheet {
 		ICONS("textures/gui/icons.png"),
-		WIDGETS("textures/gui/widgets.png");
+		WIDGETS("textures/gui/widgets.png"),
+		CREATIVE_TABS("textures/gui/container/creative_inventory/tabs.png");
 
 		private final String legacyPath;
 
@@ -216,6 +217,18 @@ final class LegacyGuiSprites {
 
 		putWidgets(map);
 
+		// Creative inventory tabs. 1.8.9 paints every tab button and the scroller onto one
+		// 256x256 sheet (textures/gui/container/creative_inventory/tabs.png); modern split it into
+		// 30 individual sprites under textures/gui/sprites/container/creative_inventory/. Each legacy
+		// cell is 28x32 (GuiContainerCreative.func_147051_a: j = i * 28, drawTexturedModalRect(...,28,32)),
+		// but modern's sprites are 26x32, so the crop is offset +1 to centre the tab point (same
+		// 1px-each-side call as the crosshair's 16->15). The four v-bands are: top unselected v=0,
+		// top selected v=32, bottom unselected v=64, bottom selected v=96. 1.8.9 has only six tab
+		// columns (0-5); _7 (column 6) is blank in legacy packs and falls back to vanilla's sprite.
+		// The scroller is a pixel-exact 12x15 match at u=232/244, v=0
+		// (GuiContainerCreative: drawTexturedModalRect(..., 232 + (needsScrollBars ? 0 : 12), 0, 12, 15)).
+		putCreativeTabs(map);
+
 		return Collections.unmodifiableMap(map);
 	}
 
@@ -257,6 +270,25 @@ final class LegacyGuiSprites {
 		map.put("widget/unlocked_button.png", lockIcon(20, 146));
 		map.put("widget/unlocked_button_highlighted.png", lockIcon(20, 166));
 		map.put("widget/unlocked_button_disabled.png", lockIcon(20, 186));
+	}
+
+	private static void putCreativeTabs(Map<String, SheetCrop> map) {
+		// Six tab columns map directly; _7 (column 6) is blank in legacy but announced so atlas
+		// discovery finds it — it just won't resolve from a legacy pack, falling back to vanilla's.
+		for (int col = 0; col < 7; col++) {
+			int u = col * 28 + 1; // +1: centre the 26-wide crop in the 28-wide cell
+			String suffix = "_" + (col + 1) + ".png";
+			map.put("container/creative_inventory/tab_top_unselected" + suffix, creativeTab(u, 0));
+			map.put("container/creative_inventory/tab_top_selected" + suffix, creativeTab(u, 32));
+			map.put("container/creative_inventory/tab_bottom_unselected" + suffix, creativeTab(u, 64));
+			map.put("container/creative_inventory/tab_bottom_selected" + suffix, creativeTab(u, 96));
+		}
+		map.put("container/creative_inventory/scroller.png", new SheetCrop(Sheet.CREATIVE_TABS, 232, 0, 12, 15));
+		map.put("container/creative_inventory/scroller_disabled.png", new SheetCrop(Sheet.CREATIVE_TABS, 244, 0, 12, 15));
+	}
+
+	private static SheetCrop creativeTab(int u, int v) {
+		return new SheetCrop(Sheet.CREATIVE_TABS, u, v, 26, 32);
 	}
 
 	/** See {@link #SPRITE_METADATA}; values copied from 26.2's own {@code widget/*.png.mcmeta}. */

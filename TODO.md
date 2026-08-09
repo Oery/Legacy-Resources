@@ -22,7 +22,7 @@ that fails silently - an unannounced sprite renders as vanilla's art with nothin
       `destroy_stage_*` overlays, blurred. Serves and lists on 58 of 69 packs; the rest lack a source
       and keep vanilla's. Needs an in-game look.
 - [ ] Copper Ingot + Tools and armor set: Can be derived from Iron ingot and tools.
-- [ ] Netherite Set: can be derived from Iron set
+- [x] Netherite Set: can be derived from Iron set
       — armour and tools done, derived from **diamond** rather than iron: vanilla's diamond and
       netherite art are the same silhouette twice, so the transform is a pure palette remap and comes
       out within 1-5% of vanilla's own texture on the control. `NetheriteArmor` covers the four item
@@ -75,6 +75,7 @@ that fails silently - an unannounced sprite renders as vanilla's art with nothin
 - [ ] Breeze Rods: can be derived from Blaze Rods
 - [ ] Recovery Compass: can be derived from Compass
 - [ ] Soul fire / soul torch: can be derived from fire / torch
+- [ ] Pillagers: can probably be derived from villagers
 
 # Not Working
 
@@ -94,6 +95,7 @@ that fails silently - an unannounced sprite renders as vanilla's art with nothin
 - [x] HUD (hearts, armor, food, air, XP/jump/boss bars, crosshair, hotbar, tab-list ping bars) — `icons.png`/`widgets.png` split into `gui/sprites/**`, see `reference/atlas-mappings.md` section 1
 - [x] Menu buttons and sliders — `widgets.png` split into `gui/sprites/widget/**`; needs the nine-slice `.mcmeta` served too, see section 1b
 - [x] Title screen logo — legacy stores it as two stacked halves, modern as one strip; same filename, so it has to be reassembled
+- [ ] Creative Inventory Tabs
 
 # Issue
 - [x] Some scaling is happening to block textures in some pack, causing all blocks to look blurry, including blocks using vanilla textures
