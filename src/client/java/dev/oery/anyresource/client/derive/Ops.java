@@ -1,6 +1,7 @@
 package dev.oery.anyresource.client.derive;
 
 import java.awt.image.BufferedImage;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Image primitives shared by {@link Derivation} implementations.
@@ -181,6 +182,36 @@ public final class Ops {
 			mix(green(base), green(base) * green(overlay) / 255, weight),
 			mix(blue(base), blue(base) * blue(overlay) / 255, weight)
 		);
+	}
+
+	/**
+	 * Which way {@code argb} leans in colour, as a unit vector, or {@code null} if it is too near grey to
+	 * lean anywhere.
+	 * <p>
+	 * The channels' distance from their own mean, which drops brightness entirely - a surface's pale
+	 * highlight and its darkest fold are the same hue and give the same vector. That is what makes this
+	 * the right tool for telling one material from another inside a texture: saturation and luminance
+	 * both vary across a single material's shading, and direction does not.
+	 *
+	 * @param floor how far from grey, in channel counts, a pixel must be before it counts as having a
+	 *              direction at all. Every derivation using this declares it as a {@code Param}, because
+	 *              the right value depends on how boldly the packs in question draw.
+	 */
+	public static double @Nullable [] chromaOf(int argb, double floor) {
+		if (alpha(argb) == 0) {
+			return null;
+		}
+		double mean = (red(argb) + green(argb) + blue(argb)) / 3.0;
+		double red = red(argb) - mean;
+		double green = green(argb) - mean;
+		double blue = blue(argb) - mean;
+		double length = Math.sqrt(red * red + green * green + blue * blue);
+		return length < floor ? null : new double[] { red / length, green / length, blue / length };
+	}
+
+	/** How nearly two {@link #chromaOf} directions point the same way, 1 for identical and -1 for opposite. */
+	public static double agree(double[] one, double[] other) {
+		return one[0] * other[0] + one[1] * other[1] + one[2] * other[2];
 	}
 
 	/** Perceptual brightness, 0-255, on the sRGB coefficients. */

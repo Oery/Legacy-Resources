@@ -4,8 +4,8 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The netherite tools, recoloured from the pack's diamond tools. See {@link NetheriteRecolor} for how
- * the recolour works.
+ * The netherite tools, recoloured from the pack's diamond tools. See {@link MetalRecolor} for how the
+ * recolour works.
  * <p>
  * A separate derivation from {@link NetheriteArmor} rather than more entries in the same map, so the
  * two can be levelled independently: a pack's diamond tools and its diamond armour often occupy
@@ -14,11 +14,11 @@ import java.util.Map;
  * fix is to match their {@code target_mean}.
  * <p>
  * The wooden handle goes through the same ramp as the head, which is also what vanilla does: its
- * netherite handles are warm browns rather than the diamond tool's original wood.
+ * netherite handles are warm browns rather than the diamond tool's original wood. {@link CopperTools}
+ * is the same set under the opposite rule, and carries the note on why.
  */
-final class NetheriteTools extends NetheriteRecolor {
-	private static final Map<String, String> PIECES =
-		pieces("item/", "sword", "pickaxe", "axe", "shovel", "hoe");
+final class NetheriteTools extends MetalRecolor {
+	private static final Map<String, String> PIECES = tools("diamond", "netherite");
 
 	@Override
 	public String id() {
@@ -31,7 +31,7 @@ final class NetheriteTools extends NetheriteRecolor {
 	}
 
 	/**
-	 * Tuned in the lab across the pack corpus; see {@link NetheriteRecolor#params} for what each does.
+	 * Tuned in the lab across the pack corpus; see {@link MetalRecolor#params} for what each does.
 	 * Close to {@link NetheriteArmor}'s but not identical - the tools carry slightly more of the
 	 * pack's own hue and a warmer highlight, which is what the two sets were judged to need
 	 * side by side.

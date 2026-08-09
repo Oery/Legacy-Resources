@@ -21,13 +21,59 @@ that fails silently - an unannounced sprite renders as vanilla's art with nothin
       — `SuspiciousGravel`: all four brushing stages, from the pack's own gravel plus its
       `destroy_stage_*` overlays, blurred. Serves and lists on 58 of 69 packs; the rest lack a source
       and keep vanilla's. Needs an in-game look.
-- [ ] Copper Ingot + Tools and armor set: Can be derived from Iron ingot and tools.
+- [x] Copper Ingot + Tools and armor set: Can be derived from Iron ingot and tools.
+      — the equipment is done, from iron: `CopperArmor` covers the four item icons plus the worn
+      `humanoid`/`humanoid_baby`/`humanoid_leggings` layers, `CopperTools` covers
+      sword/pickaxe/axe/shovel/hoe. Vanilla drew copper by repainting iron and nothing else — the two
+      agree on the alpha of *every* pixel of all nine icons and all three layers, a cleaner match than
+      diamond and netherite manage — so the same relative-ramp remap applies, now shared as
+      `MetalRecolor`. Control lands at **0.50% for the tools and 2.20% for the armour**; the armour's
+      residual is almost all the chestplate at 5.0%, which is the floor, since 1.8.9's chestplate and
+      26.2's disagree on 14 of 256 alpha pixels — that art was redrawn between eras and the tools' was
+      not. 57 of 69 packs serve and announce every output, none unlisted; the rest lack iron art and
+      keep vanilla's.
+      The one place copper parts company with netherite is the **handle, which is not recoloured** —
+      vanilla's copper tools carry the iron tool's handle tones across byte for byte, and 1.8.9 painted
+      those same four tones a decade earlier. Telling handle from head is asked of the pack twice, and
+      either answer is decisive:
+      1. **the tiers.** Every pack in the corpus that ships more than one metal does what vanilla does —
+         one silhouette, the head repainted per metal, the handle left alone — so the pack has already
+         said which pixels are metal: the ones it changed between its iron tool and its gold, diamond or
+         stone one. Asked **per pixel**, not per colour. Per colour was the first attempt and it gets a
+         fifth of the corpus wrong: a tone a pack uses on both the handle and the blade cannot be
+         classified as one or the other, so 13 of 70 packs bled copper into the handle and Occult, which
+         outlines its head in the same black it draws its handle with, lost its handle entirely.
+         Compared on colour with alpha dropped — alpha is antialiasing coverage, not material. Tiers are
+         pooled, since Occult and majesta restyle their *gold* handle but not their diamond one; safe
+         because two tiers independently agree on 99% of pixels (median), and where they disagree it is
+         one tier keeping what the other repainted rather than noise.
+      2. **the stick**, for handles drawn as wood: they lean the same way in colour as the pack's own
+         `items/stick.png`, measured as a chroma direction so shading does not matter.
+      Neither alone is enough. The stick misses the 31 PvP packs that draw the handle as flat black ink,
+      which has no colour direction at all — those had their handles turned copper and their contrast
+      flattened until the tier test went in — and it misses pax10, whose handle is wood but whose stick
+      is drawn nothing like it (8% against the tiers' 84%). The tiers miss PureBDcraft, whose 128x handle
+      is softly re-shaded per tier and so never byte-identical. On vanilla the two agree exactly, 38.3%
+      each, which is precisely its handle; the corpus runs on a median of 43%, and where it goes higher
+      the pack really does keep that much — Blue 128x repaints barely a tenth of its tool between iron
+      and gold. Scored against every pack's own tier evidence, **no pack bleeds a single pixel** and none
+      is left without a mask. The tier test also keeps the black outline a pack draws *around* the head,
+      since that ink does not change with the metal either; that is the pack's own styling and is what
+      stops the tool reading as a foreign object beside its neighbours.
+      The armour needs none of this: checked against the packs' own gold armour, they recolour it
+      wholesale, outline included, which is exactly what `CopperArmor` does.
+      `keep_hue` is 0 for both sets, unlike netherite's 0.4: it costs nothing on the control either
+      way, but at 0.1 a pack with blue-grey iron comes out pink and at 0.25 magenta. Copper is a colour
+      you can name, so it keeps none of the pack's own — the call `Beds` makes, for the same reason.
+      Still to do: ingot, nugget, horse armour (its icon would work today; the worn
+      `entity/equipment/horse_body` layer needs the same translation extension netherite's entry
+      notes), spear and nautilus armour (no legacy relative to derive from).
 - [x] Netherite Set: can be derived from Iron set
       — armour and tools done, derived from **diamond** rather than iron: vanilla's diamond and
       netherite art are the same silhouette twice, so the transform is a pure palette remap and comes
       out within 1-5% of vanilla's own texture on the control. `NetheriteArmor` covers the four item
       icons plus the worn `humanoid`/`humanoid_baby`/`humanoid_leggings` layers; `NetheriteTools`
-      covers sword/pickaxe/axe/shovel/hoe. Both share `NetheriteRecolor`.
+      covers sword/pickaxe/axe/shovel/hoe. Both share `MetalRecolor` with the copper sets.
       Still to do: ingot, scrap, horse armour (needs the equipment translation extended to
       `horse_body`), and the smithing template (no legacy equivalent to derive from).
 - [ ] Suspicious Stew: can be derived from soup
@@ -95,7 +141,8 @@ that fails silently - an unannounced sprite renders as vanilla's art with nothin
 - [x] HUD (hearts, armor, food, air, XP/jump/boss bars, crosshair, hotbar, tab-list ping bars) — `icons.png`/`widgets.png` split into `gui/sprites/**`, see `reference/atlas-mappings.md` section 1
 - [x] Menu buttons and sliders — `widgets.png` split into `gui/sprites/widget/**`; needs the nine-slice `.mcmeta` served too, see section 1b
 - [x] Title screen logo — legacy stores it as two stacked halves, modern as one strip; same filename, so it has to be reassembled
-- [ ] Creative Inventory Tabs
+- [x] Creative Inventory Tabs
+- [ ] Wooden Doors
 
 # Issue
 - [x] Some scaling is happening to block textures in some pack, causing all blocks to look blurry, including blocks using vanilla textures

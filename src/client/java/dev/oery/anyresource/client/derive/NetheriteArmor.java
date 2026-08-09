@@ -1,24 +1,14 @@
 package dev.oery.anyresource.client.derive;
 
-import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
  * The netherite armour set - the four item icons plus the layers drawn on the player - recoloured
- * from the pack's diamond armour. See {@link NetheriteRecolor} for how the recolour works.
+ * from the pack's diamond armour. See {@link MetalRecolor} for how the recolour works.
  */
-final class NetheriteArmor extends NetheriteRecolor {
-	/**
-	 * The three {@code entity/equipment/**} entries are the layers drawn on the player. They read as
-	 * modern paths, but a legacy pack has no such files - {@code LegacyPackResources} resolves them
-	 * back to the pre-1.13 {@code textures/models/armor/diamond_layer_*.png}, so the derivation gets
-	 * the pack's real art without knowing anything about the old layout. {@code humanoid} and
-	 * {@code humanoid_baby} both come from {@code _layer_1}, which is why they are separate outputs
-	 * fed by separate (identical) sources.
-	 */
-	private static final Map<String, String> PIECES = build();
+final class NetheriteArmor extends MetalRecolor {
+	private static final Map<String, String> PIECES = armor("diamond", "netherite");
 
 	@Override
 	public String id() {
@@ -30,7 +20,7 @@ final class NetheriteArmor extends NetheriteRecolor {
 		return PIECES;
 	}
 
-	/** Tuned in the lab across the pack corpus; see {@link NetheriteRecolor#params} for what each does. */
+	/** Tuned in the lab across the pack corpus; see {@link MetalRecolor#params} for what each does. */
 	@Override
 	public List<Param> params() {
 		return List.of(
@@ -44,13 +34,5 @@ final class NetheriteArmor extends NetheriteRecolor {
 			Param.of("saturation_highlight", 0, 0.6, 0.1),
 			Param.of("keep_hue", 0, 1, 0.4)
 		);
-	}
-
-	private static Map<String, String> build() {
-		Map<String, String> map = new LinkedHashMap<>(pieces("item/", "helmet", "chestplate", "leggings", "boots"));
-		for (String layer : new String[] { "humanoid", "humanoid_baby", "humanoid_leggings" }) {
-			map.put("entity/equipment/" + layer + "/diamond", "entity/equipment/" + layer + "/netherite");
-		}
-		return Collections.unmodifiableMap(map);
 	}
 }

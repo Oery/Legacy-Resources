@@ -36,7 +36,7 @@ import org.jspecify.annotations.Nullable;
  * red built like any other dye. The other fifteen take that same art and move only its cloth onto vanilla's
  * ramp for their dye, so they keep the pack's shading, weave and contrast while reading unmistakably as
  * their colour. Beds are identified by colour at a glance and a bed that came out "faintly the pack's
- * hue" would be a bed you cannot name, so unlike {@link NetheriteRecolor} nothing of the source hue is
+ * hue" would be a bed you cannot name, so unlike {@link MetalRecolor} nothing of the source hue is
  * held back.
  * <p>
  * No item texture is involved: modern {@code items/<colour>_bed.json} is a {@code minecraft:composite}
@@ -201,7 +201,7 @@ final class Beds implements Derivation {
 		double y = 0;
 		double z = 0;
 		for (int stop : ramp) {
-			double[] chroma = chromaOf(Ops.withAlpha(stop, 255), 0);
+			double[] chroma = Ops.chromaOf(Ops.withAlpha(stop, 255), 0);
 			if (chroma != null) {
 				x += chroma[0];
 				y += chroma[1];
@@ -367,7 +367,7 @@ final class Beds implements Derivation {
 		// would be worse than dyeing red too: the player picks a bed by its colour, and a red bed that is
 		// not red is the one bed in the set that lies. So those get red built the same way as the rest,
 		// which still keeps the pack's shading, weave and contrast - only the hue is vanilla's.
-		if (agree(cloth.direction(), VANILLA_RED) < params.get("red_passthrough")) {
+		if (Ops.agree(cloth.direction(), VANILLA_RED) < params.get("red_passthrough")) {
 			base.forEach((face, image) ->
 				derived.put(face.output(RED), recolor(image, cloth.mask(face), cloth, RAMPS.get(RED), params)));
 		}
@@ -479,8 +479,8 @@ final class Beds implements Derivation {
 		boolean[] mattress = new boolean[tile.length];
 		boolean any = false;
 		for (int i = 0; i < tile.length; i++) {
-			double[] chroma = Ops.alpha(tile[i]) == 0 ? null : chromaOf(tile[i], floor);
-			mattress[i] = chroma != null && agree(chroma, cloth) >= purity;
+			double[] chroma = Ops.alpha(tile[i]) == 0 ? null : Ops.chromaOf(tile[i], floor);
+			mattress[i] = chroma != null && Ops.agree(chroma, cloth) >= purity;
 			any |= mattress[i];
 		}
 		if (!any) {
@@ -575,7 +575,7 @@ final class Beds implements Derivation {
 		double floor = params.get("neutral_floor");
 		double agreement = params.get("cloth_agreement");
 		int wood = woodOf(base);
-		double[] timber = wood == 0 ? null : chromaOf(wood, floor);
+		double[] timber = wood == 0 ? null : Ops.chromaOf(wood, floor);
 
 		if (sides == null && tops == null) {
 			return null;
@@ -583,7 +583,7 @@ final class Beds implements Derivation {
 		// A pack whose blanket is the same colour as its own frame has nothing here to tell them apart
 		// with, and forcing the question would decide each pixel on rounding and speckle the result. Drop
 		// back to the row cutoff, which at least splits them somewhere deliberate.
-		if (timber != null && agree(timber, sides != null ? sides : tops) > params.get("timber_distinct")) {
+		if (timber != null && Ops.agree(timber, sides != null ? sides : tops) > params.get("timber_distinct")) {
 			timber = null;
 		}
 
@@ -605,15 +605,15 @@ final class Beds implements Derivation {
 					continue;
 				}
 				candidates++;
-				double[] chroma = chromaOf(pixels[i], floor);
-				if (chroma == null || agree(chroma, cloth) < agreement) {
+				double[] chroma = Ops.chromaOf(pixels[i], floor);
+				if (chroma == null || Ops.agree(chroma, cloth) < agreement) {
 					continue;
 				}
 				// Nearer the frame than the blanket. Asked as a comparison rather than against a fixed
 				// distance because oak and a red blanket are genuinely alike - they agree to 0.83 in
 				// vanilla's own bed - so no absolute threshold separates them, while asking which of the
 				// pack's own two references a pixel is closer to separates them every time.
-				if (timber != null && agree(chroma, timber) >= agree(chroma, cloth)) {
+				if (timber != null && Ops.agree(chroma, timber) >= Ops.agree(chroma, cloth)) {
 					continue;
 				}
 				mask[i] = true;
@@ -691,7 +691,7 @@ final class Beds implements Derivation {
 			// against.
 			Rows rows = Rows.of(entry.getKey(), entry.getValue(), null);
 			for (int i = rows.start(); i < rows.end(); i++) {
-				double[] chroma = chromaOf(pixels[i], floor);
+				double[] chroma = Ops.chromaOf(pixels[i], floor);
 				if (chroma != null) {
 					x += chroma[0];
 					y += chroma[1];
@@ -701,30 +701,6 @@ final class Beds implements Derivation {
 		}
 		double length = Math.sqrt(x * x + y * y + z * z);
 		return length <= 0 ? null : new double[] { x / length, y / length, z / length };
-	}
-
-	/**
-	 * Which way {@code argb} leans in colour, as a unit vector, or {@code null} if it is too near grey to
-	 * lean anywhere.
-	 * <p>
-	 * The channels' distance from their own mean, which drops brightness entirely - a blanket's pale
-	 * highlight and its darkest fold are the same hue and give the same vector.
-	 */
-	private static double @Nullable [] chromaOf(int argb, double floor) {
-		if (Ops.alpha(argb) == 0) {
-			return null;
-		}
-		double mean = (Ops.red(argb) + Ops.green(argb) + Ops.blue(argb)) / 3.0;
-		double red = Ops.red(argb) - mean;
-		double green = Ops.green(argb) - mean;
-		double blue = Ops.blue(argb) - mean;
-		double length = Math.sqrt(red * red + green * green + blue * blue);
-		return length < floor ? null : new double[] { red / length, green / length, blue / length };
-	}
-
-	/** How nearly two colour directions point the same way, 1 for identical and -1 for opposite. */
-	private static double agree(double[] one, double[] other) {
-		return one[0] * other[0] + one[1] * other[1] + one[2] * other[2];
 	}
 
 	/**

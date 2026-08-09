@@ -18,6 +18,8 @@ public final class Derivations {
 		new SuspiciousGravel(),
 		new NetheriteArmor(),
 		new NetheriteTools(),
+		new CopperArmor(),
+		new CopperTools(),
 		new Beds()
 	);
 
