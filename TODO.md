@@ -160,6 +160,8 @@ that fails silently - an unannounced sprite renders as vanilla's art with nothin
 - [ ] Pillagers: can probably be derived from villagers
 - [ ] Trap doors: from their respective wood (very experimental)
 - [ ] White Dye: should be derived from another dye (magenta for example)
+- [ ] Suspicious Sand: same as suspicious gravel but with sand
+- [ ] Honey Blocks: from slime blocks
 
 # Not Working
 
@@ -197,8 +199,94 @@ that fails silently - an unannounced sprite renders as vanilla's art with nothin
       at all — 1.8.9 had exactly one wooden trapdoor. Pointing them all at the pack's single `trapdoor`
       would make the inverse map ambiguous and give a birch trapdoor oak art, so it is a judgement call
       rather than a fix; deriving them from the pack's own planks is the better answer.
-- [ ] Clouds?
-- [ ] Noteblocks
+- [ ] Clouds — **needs reworking, the in-game result is bad**
+      The scale half below is settled and correct; the *appearance* is not, and a second attempt
+      should probably start by questioning whether a per-cell binary mask can represent these sheets
+      at all. What has been tried and rejected, so it is not tried again:
+      - cut at `alpha < 10` (modern's own): a soft-painted pack's halo turns solid, 35% of cells
+        against vanilla's 27.6%, in continents rather than puffs — a sky roofed with slabs;
+      - cut at half opacity: erases such a pack's clouds outright;
+      - cut at the sheet's own ink (`sum(alpha)/255`, currently shipped): numerically principled and
+        leaves hard-edged sheets untouched, but on PureBDcraft it lands at 8.6% of cells and reads as
+        thin and wispy — closer to right than the first attempt, still not good.
+      Worth weighing next time: that modern's clouds are *geometry*, not a texture, may simply mean
+      an HD painterly sheet has no faithful rendition — in which case **declining** to convert a
+      non-256 sheet (so vanilla's own clouds render, unmistakably not the pack's art but not wrong
+      either) may beat any threshold. Judge it in game against 1.8.9 side by side rather than on
+      coverage numbers, which is what led the first two attempts astray.
+      — served correctly all along (the path never changed, so they pass straight through), but the
+      two eras read the sheet at different scales, so anything other than 256x256 came out the wrong
+      size. 1.8.9's `renderCloudsFancy` steps its texture coordinate by a hardcoded `1/256` per
+      12-block cell: the whole file is stretched over 256 cells whatever its resolution, so an HD
+      pack's clouds covered the same 3072 blocks vanilla's did and the extra pixels only ever added
+      sub-cell detail. 26.2's `CloudRenderer.prepare` builds one cell per **pixel** and tiles at
+      `width * 12` blocks, so the same file renders at `width / 256` scale — 4 of the 21 packs that
+      ship one were affected, worst of them PureBDcraft at 2048px: clouds eight times too large over
+      a 24,576-block period, off a 4.2M-entry cell array rebuilt on every reload.
+      `computeCloudsTexture` resamples anything that isn't 256x256 onto that grid, **by coverage,
+      not by colour**: `encodeFace` writes three bytes of position and direction per face and takes
+      the colour from a uniform, so the pixel's own colour never reaches the GPU and the only thing
+      a cell decides is present-or-absent. A cell is drawn when at least half the pixels it covers
+      are cloud, which is the silhouette 1.8.9 showed at its own 256-cell granularity. The 13 packs
+      already at 256x256 are passed through byte-for-byte rather than round-tripped through ImageIO,
+      and the 4 whose "clouds" is a single transparent pixel — the pre-1.13 way of turning clouds
+      off — upsample to an empty sheet and still render nothing, which is why the resample has to
+      handle a source smaller than the grid rather than only shrinking.
+      **Which pixels count as cloud is the whole difficulty**, and getting it wrong is what the first
+      attempt did: it cut at `isCellEmpty`'s own `alpha < 10`, which is right for vanilla-descended
+      art (binary, cloud at 255 over empty at 1 — and note 1.8.9's empty sky is alpha 1, under
+      modern's threshold by coincidence rather than design, so the common sheet was never at risk)
+      and badly wrong for a soft-painted one. PureBDcraft is the extreme: **no** pixel in its sheet is
+      fully opaque, 4.6% reaches 128, and 21% sits between 10 and 63 — a halo 1.8.9 drew at under a
+      tenth opacity, which modern cannot draw at all, since a cell is either a solid 12-block box or
+      nothing. Cutting at "visible" turned that halo solid: 35% of all cells against vanilla's 27.6%,
+      in sprawling continents rather than puffs, which in game is a sky roofed over with slabs.
+      Cutting at half-opacity instead erases such a pack's clouds outright.
+      The measure that serves both is **ink** — `sum(alpha)/255`, how many pixels' worth of opaque
+      cloud the sheet holds. `cloudAlphaThreshold` picks, per sheet, the alpha whose mask holds that
+      much, which on a soft sheet recovers about the mask the paint was spread from (blur conserves
+      ink) and on a hard-edged one lands at the top of the ramp and changes nothing. PureBDcraft
+      35.2% → 8.6% of cells, Default Low Fire 37.7% → 10.3%, Nightshade 33.4% → 14.6%, while 30.zip
+      — 21.9% of its pixels genuinely opaque — keeps 27.1%. No constant of its own, and no per-pack
+      tuning, which a threshold picked by eye on four sheets would not have survived.
+      Sodium was a red herring worth recording: it is installed in the test instance and does replace
+      cloud rendering, but 0.9.2 only overrides `buildMesh` and reuses vanilla's `TextureData`, so
+      vanilla's `prepare` is still what reads the sheet and the alpha rule above is still the one
+      that matters.
+      Needs an in-game look.
+- [x] Noteblocks
+      — 1.8.9's file is `blocks/noteblock.png`, one word; modern asks for `block/note_block.png`.
+      No entry in `block_textures.json`, so it fell through to identity, looked for
+      `blocks/note_block.png` and found it in 2 of 70 packs (both of which happen to ship
+      post-flattening names). 51 packs had note block art that went nowhere. Jukebox, checked at the
+      same time, was fine — its two file names never changed, so identity carries it on all 52 packs
+      that ship the art, and `record_*` -> `music_disc_*` was already mapped.
+      The audit afterwards is the useful part: rather than checking the entries that exist (which is
+      what the oak door and quartz pillar fixes did, and neither would have caught this), list the
+      **1.8.9 files nothing can reach** — not a value in the map, and not a name modern still uses.
+      29 of 373 block files came back, and once the ones consumed by a derivation or a synthesized
+      texture are set aside, every one of the rest was this same bug:
+      `cobweb`/`web`, `lily_pad`/`waterlily`, `sugar_cane`/`reeds` (the *item* was mapped, the block
+      was not), `nether_portal`/`portal`, `spawner`/`mob_spawner`, `slime_block`/`slime`,
+      `wet_sponge`/`sponge_wet`, `farmland_moist`/`farmland_wet`, `nether_bricks`/`nether_brick`,
+      `tripwire`/`trip_wire`, `tripwire_hook`/`trip_wire_source`, `cocoa_stage0-2`/`cocoa_stage_0-2`
+      (the crops group has the same rename for wheat, carrots, potatoes and nether wart — cocoa was
+      simply missed), and `end_portal_frame_top`/`side`/`eye` from `endframe_*`. Each is served and
+      announced on 49-61 packs now, from 1-4 before. `.mcmeta` follows the same map, so the animated
+      portal and tripwire sheets bring their own frame timing across too.
+      Two legacy files are left unreachable on purpose: `command_block` (1.9 split one texture into
+      back/front/side, so pointing all three at it is a judgement call like the trapdoors, not a
+      rename) and `itemframe_background` (no modern block texture at all).
+      One asymmetry surfaced while measuring, and it predates these entries: `listResources` renames
+      only the names it recognizes, so a pack shipping a post-flattening name in a pre-flattening
+      tree (`textures/blocks/farmland_moist.png` — 5 in the corpus, and 3 ship `cobweb.png`) had it
+      announced under that name while `getResource` resolved only the mapped one and answered
+      nothing. `resolveTexture` now falls back to the modern name, which cannot be wrong — the file
+      is called exactly what was asked for — and makes served match announced on every entry above.
+      Measured by driving the real `LegacyPackResources` over all 69 packs plus vanilla 1.8.9:
+      blockstates leaving states unmodelled stay at 0 across the corpus, and unannounced sprite
+      references in served models go 757 -> 713.
+      Needs an in-game look.
 
 # Issue
 - [x] Some scaling is happening to block textures in some pack, causing all blocks to look blurry, including blocks using vanilla textures
@@ -260,13 +348,59 @@ that fails silently - an unannounced sprite renders as vanilla's art with nothin
       path carrying a pre-flattening stem - `block/stonebrick`, where the atlas only ever gets
       `block/stone_bricks` - therefore passes. Nothing in the corpus is reachable through one today, but
       the exact test is the announced-name round-trip, not file existence.
-- [ ] `bone_meal` is served but never announced
+- [x] PureBDcraft: farmland, sandstone and snow render as missing-model cubes
+      — the same imprecision as the note above, but on the *model* half, where the corpus does reach it.
+      `modelResolves` asked whether a model could be **served**; what decides whether the game sees one is
+      whether it is **announced**, and models only ever reach the game through `listResources`, which
+      announces the pack's own files and nothing else. So a model this class would synthesize on demand,
+      for a name the pack ships no file under, counted as resolvable while being unreachable.
+      PureBDcraft ships `blockstates/farmland.json` but no models of its own, naming 1.8's `farmland_dry`;
+      since it does ship `textures/blocks/farmland_dry.png`, `computeBlockModel` was glad to invent a
+      `cube_all` under that name, so the blockstate was accepted, announced, and then pointed at a model
+      nothing announces. Same for `sandstone` -> `sandstone_normal` and `snow` -> `snow`.
+      Every one of these is a model 1.13 renamed, so refusing the blockstate is also right on the merits -
+      vanilla's own over the pack's sprites is the block the pack was drawing. `snow` makes the point
+      twice over: the flattening moved the *name* to the layer block and the full block became
+      `snow_block`, so the pack's `blockstates/snow.json` describes a different block from the one modern
+      asks that file for, and honouring it would give snow layers a full cube even if the model resolved.
+      Blockstate and model *file* names are still not mapped through the flattening (only textures are),
+      which is why the pack's own `snow_layer.json` remains unreachable; that mapping is the larger job,
+      and refusing is the correct behaviour until it exists.
+      The metric that catches this is new, and neither previous one could see it: "every state is
+      modelled" only validates a blockstate's selectors, and the sprite check only looked at models the
+      pack ships. Collecting every model reference out of each announced blockstate and asking whether
+      that name is announced (by the pack) or shipped (by 26.2) finds **38 dangling references across 2
+      packs** before, 0 after — 3 blockstates in PureBDcraft, and 35 models in Queue 32x whose parents the
+      flattening deleted (`block/half_slab_oak`, `block/stonebrick_normal`, `block/carpet_*`). The
+      tightening costs exactly those 38 files corpus-wide (announced blockstates 874 -> 871, models
+      9144 -> 9109) and nothing else, and every one of them was a missing-model cube in game.
+      Needs an in-game look.
+- [x] `bone_meal` is served but never announced
       — 1.8.9 had one `dye_powder_white` where modern has both `bone_meal` and `white_dye`, so both
-      entries point at it. The forward direction is right and deliberate, but `TextureNameMaps.invert`
-      is one-to-one and `putIfAbsent` gives the legacy name to `white_dye`, so `listResources` never
-      announces `bone_meal` — the half that fails silently. Needs the inverse to be one-to-many and
-      `listResources` to emit every modern name for a legacy file, not just the first.
-- [ ] `item_textures.json` maps `crossbow` -> `crossbow_standby`, which exists in neither era
-      — 1.8.9 has no crossbow, 26.2's texture is `crossbow_standby`, and no corpus pack ships crossbow
-      art. Dead in both directions rather than harmful; either drop it or point `crossbow_standby` at
-      something real.
+      entries point at it. The forward direction is right and deliberate; `TextureNameMaps.invert` was
+      one-to-one, so `listResources` announced one of the two and the other silently rendered as
+      vanilla's. The inverse now groups by legacy name and `listResources` emits every modern name a
+      listed file is the art for. Both go to 54 and 53 packs of 70, served and announced alike.
+      Measured before fixing, the note above turned out to have the wrong one: it was **`white_dye`**
+      that was announced by nothing (0 of 70), not `bone_meal` (54). Which of the pair lost was decided
+      by `HashMap` iteration order under `putIfAbsent` — it could have been either, and could have
+      changed between runs or JDKs. So `load` now keeps the mapping file's own order (a
+      `LinkedHashMap`, not `Map.copyOf`, whose iteration order is explicitly unspecified) and the
+      canonical name — the one `newBlockName` hands to a model rewrite, where only one name can be
+      written — is whichever the file lists first. That is a decision the file can now make rather
+      than the JDK.
+      Only `dye_powder_white` is claimed by two modern names today, in either map, so nothing else
+      changes; the plural lookup exists for the next split, and the singular one is still what model
+      rewriting uses, since a texture variable takes a single value.
+- [x] `item_textures.json` maps `crossbow` -> `crossbow_standby`, which exists in neither era
+      — dropped. 1.8.9 has no crossbow, and 26.2's item texture is `crossbow_standby` with no plain
+      `crossbow.png`, so the entry pointed a name modern never asks for at a file no legacy pack has.
+      Dead in both directions before and after: 0 packs of 70 serve or announce either name.
+- [ ] Torch in first hand has bad orientation (bdcraft)
+- [ ] doors in the inventory has bad orientation (bd craft model)
+- [ ] doors have 3d model when held but not when placed (bd craft)
+- [ ] Cauldron with snow inside shows vanilla texture
+- [ ] Trapdoor custom model on bdcraft doesnt look right
+- [ ] cocoa bean has a bad uv mapping (at least on bdcraft)
+- [ ] command blocks are not working
+- [ ] beds model dont work correctly (bdcraft)

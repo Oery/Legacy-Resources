@@ -12,7 +12,6 @@
   "rabbit": "rabbit_raw",
   "fishing_rod": "fishing_rod_uncast",
   "bow": "bow_standby",
-  "crossbow": "crossbow_standby",
   "cooked_cod": "fish_cod_cooked",
   "cod": "fish_cod_raw",
   "cooked_salmon": "fish_salmon_cooked",

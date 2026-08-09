@@ -26,6 +26,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
 import javax.imageio.ImageIO;
@@ -184,6 +185,37 @@ public final class LegacyPackResources implements PackResources {
 	private static final String COMPASS_FRAME_STEM_PREFIX = "compass_";
 	private static final int COMPASS_MODERN_FRAME_COUNT = 32;
 	private static final String FISHING_HOOK_TEXTURE_PATH = "textures/entity/fishing/fishing_hook.png";
+	/**
+	 * The two eras read {@code clouds.png} at completely different scales, so a pack whose sheet
+	 * isn't 256x256 needs resampling to that size - the file name never changed, which is exactly
+	 * why this one goes unnoticed.
+	 * <p>
+	 * 1.8.9's {@code RenderGlobal.renderCloudsFancy} steps its texture coordinate by a hardcoded
+	 * {@code 1/256} per 12-block cell: the whole sheet is stretched over 256 cells whatever its
+	 * resolution, so an HD pack's cloud layer covers the same 3072 blocks vanilla's does and the
+	 * extra pixels only ever added sub-cell detail (blurred away by the sampler). Modern's
+	 * {@code CloudRenderer.prepare} instead builds one 12-block cell per <em>pixel</em> and tiles at
+	 * {@code width * 12} blocks, so the same file comes out scaled by {@code width / 256}: a 2048px
+	 * sheet renders clouds eight times too large over a 24,576-block period, off a 4.2M-entry cell
+	 * array rebuilt on every reload.
+	 * <p>
+	 * Resampling is by coverage, not by colour: modern's {@code encodeFace} writes three bytes of
+	 * position and direction per face and takes the cloud colour from a uniform, so the pixel's own
+	 * colour never reaches the GPU and the only thing a cell decides is present-or-absent. A cell is
+	 * therefore drawn when at least half the source pixels it covers are cloud, which reproduces the
+	 * silhouette 1.8.9 showed at its own 256-cell granularity; the averaged colour is carried across
+	 * anyway, against a future version reading it. Which pixels count as cloud is the whole
+	 * difficulty, and is per sheet - see {@link #cloudAlphaThreshold}.
+	 * <p>
+	 * A sheet already at 256x256 is passed through untouched rather than round-tripped through
+	 * ImageIO, which keeps the common case byte-for-byte identical. A smaller one is upsampled onto
+	 * the grid rather than declined: the four packs whose "clouds" is a single transparent pixel -
+	 * the pre-1.13 way of turning clouds off - come out an empty sheet and still render nothing.
+	 */
+	private static final String CLOUDS_TEXTURE_PATH = "textures/environment/clouds.png";
+	private static final int CLOUD_CELLS_PER_REPEAT = 256;
+	/** {@code CloudRenderer.isCellEmpty}: a cell is drawn only where the sheet's alpha reaches this. */
+	private static final int CLOUD_CELL_MIN_ALPHA = 10;
 	private static final String PARTICLE_ATLAS_PATH = "textures/particle/particles.png";
 	private static final int PARTICLE_ATLAS_GRID = 16;
 	private static final int FISHING_HOOK_ATLAS_COLUMN = 1;
@@ -430,6 +462,14 @@ public final class LegacyPackResources implements PackResources {
 		if (path.equals(FISHING_HOOK_TEXTURE_PATH)) {
 			return resolveJson(location, () -> computeFishingHookTexture(location));
 		}
+		if (path.equals(CLOUDS_TEXTURE_PATH)) {
+			IoSupplier<InputStream> resampled = resolveJson(location, () -> computeCloudsTexture(location));
+			// Only a sheet that isn't 256x256 is rewritten; everything else falls through to the
+			// delegate below and is served exactly as the pack shipped it. See CLOUDS_TEXTURE_PATH.
+			if (resampled != null) {
+				return resampled;
+			}
+		}
 		if (path.startsWith(CHEST_TEXTURE_DIR) && path.endsWith(".png")) {
 			String stem = path.substring(CHEST_TEXTURE_DIR.length(), path.length() - ".png".length());
 			IoSupplier<InputStream> chestTexture = resolveChestTexture(location, stem);
@@ -483,23 +523,23 @@ public final class LegacyPackResources implements PackResources {
 		if (isOrUnder(directory, "textures/block")) {
 			String oldDirectory = "textures/blocks" + directory.substring("textures/block".length());
 			delegate.listResources(type, namespace, oldDirectory, (oldId, supplier) -> {
-				Identifier newId = translateListed(oldId, OLD_BLOCK_TEXTURE_DIR, NEW_BLOCK_TEXTURE_DIR, TextureNameMaps::newBlockName);
-				if (newId == null) {
-					return;
-				}
-				// Keep in sync with the getResource intercept: the dot is synthesized, not a raw
-				// passthrough of the legacy file, so listing must fetch it the same way.
-				if (newId.getPath().equals(REDSTONE_DUST_DOT_TEXTURE_PATH)) {
-					IoSupplier<InputStream> resource = getResource(PackType.CLIENT_RESOURCES, newId);
-					if (resource != null) {
-						output.accept(newId, resource);
+				for (Identifier newId : translateListed(
+					oldId, OLD_BLOCK_TEXTURE_DIR, NEW_BLOCK_TEXTURE_DIR, TextureNameMaps::newBlockNames
+				)) {
+					// Keep in sync with the getResource intercept: the dot is synthesized, not a raw
+					// passthrough of the legacy file, so listing must fetch it the same way.
+					if (newId.getPath().equals(REDSTONE_DUST_DOT_TEXTURE_PATH)) {
+						IoSupplier<InputStream> resource = getResource(PackType.CLIENT_RESOURCES, newId);
+						if (resource != null) {
+							output.accept(newId, resource);
+						}
+						continue;
 					}
-					return;
+					if (!isValidLegacyTexture(oldId, supplier)) {
+						return;
+					}
+					output.accept(newId, supplier);
 				}
-				if (!isValidLegacyTexture(oldId, supplier)) {
-					return;
-				}
-				output.accept(newId, supplier);
 			});
 			announceDerivedTextures(namespace, "block/", output);
 			return;
@@ -507,10 +547,12 @@ public final class LegacyPackResources implements PackResources {
 		if (isOrUnder(directory, "textures/item")) {
 			String oldDirectory = "textures/items" + directory.substring("textures/item".length());
 			delegate.listResources(type, namespace, oldDirectory, (oldId, supplier) -> {
-				Identifier newId = translateListed(oldId, OLD_ITEM_TEXTURE_DIR, NEW_ITEM_TEXTURE_DIR, TextureNameMaps::newItemName);
-				if (newId != null && isValidLegacyTexture(oldId, supplier)) {
-					output.accept(newId, supplier);
+				List<Identifier> newIds =
+					translateListed(oldId, OLD_ITEM_TEXTURE_DIR, NEW_ITEM_TEXTURE_DIR, TextureNameMaps::newItemNames);
+				if (newIds.isEmpty() || !isValidLegacyTexture(oldId, supplier)) {
+					return;
 				}
+				newIds.forEach(newId -> output.accept(newId, supplier));
 			});
 			// item/compass_00..31 are standalone sprites with no legacy-pack file of their own
 			// (see LEGACY_COMPASS_TEXTURE_PATH's javadoc) - like the redstone dust textures above,
@@ -621,7 +663,19 @@ public final class LegacyPackResources implements PackResources {
 			// Deliberately no early return: a legacy pack has nothing of its own under this path
 			// today, but swallowing the query outright would silently drop anything it did ship.
 		}
-		delegate.listResources(type, namespace, directory, output);
+		delegate.listResources(type, namespace, directory, (id, supplier) -> {
+			// Everything left is passed through as the pack shipped it, bar the cloud sheet, which
+			// getResource may resample (see CLOUDS_TEXTURE_PATH) and which must therefore be announced
+			// resampled too. Nothing loads clouds.png through listing today - CloudRenderer.prepare
+			// opens it by name - but the two answering differently for the same file is precisely the
+			// bug that keeps being found here.
+			if (!id.getPath().equals(CLOUDS_TEXTURE_PATH)) {
+				output.accept(id, supplier);
+				return;
+			}
+			IoSupplier<InputStream> clouds = getResource(PackType.CLIENT_RESOURCES, id);
+			output.accept(id, clouds != null ? clouds : supplier);
+		});
 	}
 
 	private void announceComputedModel(String namespace, String stem, PackResources.ResourceOutput output) {
@@ -670,12 +724,35 @@ public final class LegacyPackResources implements PackResources {
 		delegate.close();
 	}
 
+	/**
+	 * The pack's art for a modern texture path, by the mapped legacy name and then, failing that, by
+	 * the modern name itself.
+	 * <p>
+	 * The second attempt is what keeps {@link #getResource} and {@link #listResources} answering
+	 * alike. Listing works from the files the pack actually has and only renames the ones it
+	 * recognizes, so a pack that ships a post-flattening name in a pre-flattening tree
+	 * ({@code textures/blocks/farmland_moist.png}, say - 5 in the corpus do, and 3 ship
+	 * {@code cobweb.png}) has it announced under that same name by the identity fall-through in
+	 * {@link TextureNameMaps}. Resolving only the mapped name would then answer nothing for a
+	 * sprite this pack was just announced as overriding - and every existence check in this class
+	 * runs through here, so it would also decide the pack has no art for a block it plainly does.
+	 * Reading a file whose name is exactly what modern asked for cannot be wrong; it just was not
+	 * where the era says to look.
+	 */
 	private @Nullable IoSupplier<InputStream> resolveTexture(Identifier location, String path) {
 		String oldPath = translateTexturePath(path);
 		if (oldPath == null) {
 			return null;
 		}
-		return delegate.getResource(PackType.CLIENT_RESOURCES, location.withPath(oldPath));
+		IoSupplier<InputStream> mapped = delegate.getResource(PackType.CLIENT_RESOURCES, location.withPath(oldPath));
+		if (mapped != null) {
+			return mapped;
+		}
+		String unmappedPath = untranslatedTexturePath(path);
+		if (unmappedPath == null || unmappedPath.equals(oldPath)) {
+			return null;
+		}
+		return delegate.getResource(PackType.CLIENT_RESOURCES, location.withPath(unmappedPath));
 	}
 
 	/**
@@ -1089,6 +1166,122 @@ public final class LegacyPackResources implements PackResources {
 			LegacyResources.LOGGER.warn("Failed to crop fishing hook icon from legacy particle atlas in pack {}", location().id(), e);
 			return null;
 		}
+	}
+
+	/**
+	 * Resamples a legacy pack's cloud sheet onto modern's one-pixel-per-cell grid; see
+	 * {@link #CLOUDS_TEXTURE_PATH} for why, and {@code null} (pass the pack's own file through
+	 * untouched) whenever it is already 256x256 or cannot be read as an image.
+	 */
+	private byte @Nullable [] computeCloudsTexture(Identifier location) {
+		IoSupplier<InputStream> supplier = delegate.getResource(PackType.CLIENT_RESOURCES, location);
+		if (supplier == null) {
+			return null;
+		}
+		try (InputStream in = supplier.get()) {
+			BufferedImage source = ImageIO.read(in);
+			if (source == null || source.getWidth() <= 0 || source.getHeight() <= 0
+				|| (source.getWidth() == CLOUD_CELLS_PER_REPEAT && source.getHeight() == CLOUD_CELLS_PER_REPEAT)) {
+				return null;
+			}
+			int width = source.getWidth();
+			int height = source.getHeight();
+			int[] pixels = source.getRGB(0, 0, width, height, null, 0, width);
+			int threshold = cloudAlphaThreshold(pixels);
+			BufferedImage out =
+				new BufferedImage(CLOUD_CELLS_PER_REPEAT, CLOUD_CELLS_PER_REPEAT, BufferedImage.TYPE_INT_ARGB);
+			for (int cellY = 0; cellY < CLOUD_CELLS_PER_REPEAT; cellY++) {
+				int top = cellY * height / CLOUD_CELLS_PER_REPEAT;
+				// At least one source row per cell, so a sheet smaller than the grid (a 1x1 "no
+				// clouds" pack, say) upsamples instead of collapsing to an empty span.
+				int bottom = Math.max(top + 1, (cellY + 1) * height / CLOUD_CELLS_PER_REPEAT);
+				for (int cellX = 0; cellX < CLOUD_CELLS_PER_REPEAT; cellX++) {
+					int left = cellX * width / CLOUD_CELLS_PER_REPEAT;
+					int right = Math.max(left + 1, (cellX + 1) * width / CLOUD_CELLS_PER_REPEAT);
+					out.setRGB(cellX, cellY, cloudCell(pixels, width, left, top, right, bottom, threshold));
+				}
+			}
+			ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+			ImageIO.write(out, "png", bytes);
+			return bytes.toByteArray();
+		} catch (IOException e) {
+			LegacyResources.LOGGER.warn("Failed to resample the cloud sheet in legacy pack {}", location().id(), e);
+			return null;
+		}
+	}
+
+	/**
+	 * The alpha at which this sheet's own art stops being cloud and starts being halo, chosen so that
+	 * the mask it cuts holds as much ink as the sheet does - {@code sum(alpha)/255} pixels' worth.
+	 * <p>
+	 * A fixed cut cannot serve both kinds of sheet in the corpus. Vanilla-descended art is binary,
+	 * cloud at 255 over empty at 1, and any cut between the two gives the same mask. The HD sheets are
+	 * painted soft, and PureBDcraft's is the extreme: <em>no</em> pixel in it is fully opaque, 4.6% of
+	 * it reaches 128, and 21% sits between 10 and 63 - a wide halo that 1.8.9 drew at under a tenth
+	 * opacity and modern cannot draw at all, since a cell is either a solid 12-block box or nothing.
+	 * Cutting at "visible" turned that halo solid and covered the sky in slabs at 35% of all cells,
+	 * against vanilla's 27.6%; cutting at half-opacity instead would erase the pack's clouds outright.
+	 * <p>
+	 * Ink is the measure that survives both: blur conserves it, so on a soft sheet this recovers about
+	 * the mask the paint was spread from (PureBDcraft 35.2% -> 8.6% of cells, Default Low Fire 37.7%
+	 * -> 10.3%), while on a hard-edged one the cut simply lands at the top of the ramp and changes
+	 * nothing (30.zip, 21.9% of its pixels opaque, keeps 27.1%). It also needs no constant of its own
+	 * and no per-pack tuning, which a threshold picked by eye on four sheets would not survive.
+	 */
+	private static int cloudAlphaThreshold(int[] pixels) {
+		int[] histogram = new int[256];
+		long ink = 0;
+		for (int argb : pixels) {
+			int alpha = argb >>> 24;
+			histogram[alpha]++;
+			ink += alpha;
+		}
+		// How many pixels' worth of fully opaque cloud the sheet holds in total.
+		long inkPixels = ink / 255;
+		long above = 0;
+		for (int alpha = 255; alpha > CLOUD_CELL_MIN_ALPHA; alpha--) {
+			above += histogram[alpha];
+			if (above >= inkPixels) {
+				return alpha;
+			}
+		}
+		// Never below what modern itself can see: a pixel under CloudRenderer's own threshold was
+		// invisible in both eras and has no business becoming a solid box.
+		return CLOUD_CELL_MIN_ALPHA;
+	}
+
+	/**
+	 * One cell of the resampled cloud sheet: drawn (as the average colour of the pixels that carried
+	 * it) when at least half the pixels it covers reach {@code threshold}, otherwise empty.
+	 */
+	private static int cloudCell(int[] pixels, int width, int left, int top, int right, int bottom, int threshold) {
+		long alpha = 0;
+		long red = 0;
+		long green = 0;
+		long blue = 0;
+		int drawn = 0;
+		for (int y = top; y < bottom; y++) {
+			int row = y * width;
+			for (int x = left; x < right; x++) {
+				int argb = pixels[row + x];
+				int pixelAlpha = argb >>> 24;
+				if (pixelAlpha < threshold) {
+					continue;
+				}
+				drawn++;
+				alpha += pixelAlpha;
+				red += (argb >> 16) & 0xFF;
+				green += (argb >> 8) & 0xFF;
+				blue += argb & 0xFF;
+			}
+		}
+		if (drawn * 2 < (right - left) * (bottom - top)) {
+			return 0;
+		}
+		// Every pixel averaged in is at or above the threshold, which is itself at or above the one
+		// modern reads the sheet with, so a cell decided to be cloud can never come back out of this
+		// as an empty one.
+		return (int) (alpha / drawn) << 24 | (int) (red / drawn) << 16 | (int) (green / drawn) << 8 | (int) (blue / drawn);
 	}
 
 	/**
@@ -1668,17 +1861,35 @@ public final class LegacyPackResources implements PackResources {
 	}
 
 	/**
-	 * Whether {@code modelId} (e.g. {@code minecraft:block/cobblestone}) can be loaded at all - from
-	 * this pack, converted, or from the vanilla assets underneath it. This is the question that decides
-	 * whether a converted blockstate or model is worth serving, so it has to be asked the same way the
-	 * game will: against both layers, since a legacy pack leans on vanilla for every model it doesn't
-	 * ship itself.
+	 * Whether {@code modelId} (e.g. {@code minecraft:block/cobblestone}) will actually reach the game -
+	 * from this pack, converted, or from the vanilla assets underneath it. This is the question that
+	 * decides whether a converted blockstate or model is worth serving, so it has to be asked the same
+	 * way the game will: against both layers, since a legacy pack leans on vanilla for every model it
+	 * doesn't ship itself.
+	 * <p>
+	 * The distinction that matters is <em>announced</em>, not merely <em>servable</em>. Models only ever
+	 * reach the game through {@link #listResources}, which announces the pack's own files (converted)
+	 * and nothing else - so a model this class would happily synthesize on demand, for a name the pack
+	 * ships no file under, is unreachable however confidently {@link #getResource} answers for it.
+	 * Asking {@code getResource} alone is how PureBDcraft's farmland, sandstone and snow came out as
+	 * missing-model cubes: it ships {@code blockstates/farmland.json} naming 1.8's
+	 * {@code farmland_dry} model but no model file of its own, and since it does ship
+	 * {@code textures/blocks/farmland_dry.png}, {@link #computeBlockModel} was glad to invent a
+	 * {@code cube_all} for that name - so the blockstate was accepted, announced, and then pointed at a
+	 * model nothing announces. Every such reference is a model 1.13 renamed ({@code farmland_dry} ->
+	 * {@code farmland}, {@code sandstone_normal} -> {@code sandstone}, and {@code snow}, whose very
+	 * meaning moved to {@code snow_block} when the layer block took the bare name), so refusing the
+	 * blockstate is also the right answer on the merits: vanilla's own, over the pack's sprites, is the
+	 * block the pack was drawing.
 	 */
 	private boolean modelResolves(Identifier modelId) {
 		if (modelId.equals(GENERATED_ITEM_MODEL)) {
 			return true;
 		}
 		Identifier file = modelId.withPath(MODEL_DIR + modelId.getPath() + JSON_SUFFIX);
+		if (!packHas(file)) {
+			return ModernVanillaAssets.has(file);
+		}
 		Set<Identifier> resolving = resolvingModels.get();
 		if (!resolving.add(file)) {
 			// Already being decided further up this call chain, i.e. the parent chain loops back on
@@ -1686,6 +1897,8 @@ public final class LegacyPackResources implements PackResources {
 			return false;
 		}
 		try {
+			// The pack's own file, so it is listed either way; whether it is announced converted or
+			// left to vanilla is what its conversion decides.
 			return getResource(PackType.CLIENT_RESOURCES, file) != null || ModernVanillaAssets.has(file);
 		} finally {
 			resolving.remove(file);
@@ -1831,10 +2044,19 @@ public final class LegacyPackResources implements PackResources {
 		return isOrUnder(directory, root) || directoryCovers(directory, root);
 	}
 
-	private static @Nullable Identifier translateListed(Identifier oldId, String oldDir, String newDir, UnaryOperator<String> nameMap) {
+	/**
+	 * Every modern identifier a listed legacy file should be announced under, empty if it is not a
+	 * texture this translates at all.
+	 * <p>
+	 * Usually one, but the flattening split some files in two and both halves have to be announced or
+	 * the unannounced one silently renders as vanilla's art - see {@link TextureNameMaps}.
+	 */
+	private static List<Identifier> translateListed(
+		Identifier oldId, String oldDir, String newDir, Function<String, List<String>> nameMap
+	) {
 		String path = oldId.getPath();
 		if (!path.startsWith(oldDir)) {
-			return null;
+			return List.of();
 		}
 		String rest = path.substring(oldDir.length());
 		String stem;
@@ -1846,9 +2068,9 @@ public final class LegacyPackResources implements PackResources {
 			suffix = ".png";
 			stem = rest.substring(0, rest.length() - suffix.length());
 		} else {
-			return null;
+			return List.of();
 		}
-		return oldId.withPath(newDir + nameMap.apply(stem) + suffix);
+		return nameMap.apply(stem).stream().map(newStem -> oldId.withPath(newDir + newStem + suffix)).toList();
 	}
 
 	private static @Nullable String translateTexturePath(String path) {
@@ -1857,6 +2079,17 @@ public final class LegacyPackResources implements PackResources {
 		}
 		if (path.startsWith(NEW_ITEM_TEXTURE_DIR)) {
 			return translate(path, NEW_ITEM_TEXTURE_DIR, OLD_ITEM_TEXTURE_DIR, TextureNameMaps::oldItemName);
+		}
+		return null;
+	}
+
+	/** The same path in the legacy tree but under its modern name; see {@link #resolveTexture}. */
+	private static @Nullable String untranslatedTexturePath(String path) {
+		if (path.startsWith(NEW_BLOCK_TEXTURE_DIR)) {
+			return translate(path, NEW_BLOCK_TEXTURE_DIR, OLD_BLOCK_TEXTURE_DIR, UnaryOperator.identity());
+		}
+		if (path.startsWith(NEW_ITEM_TEXTURE_DIR)) {
+			return translate(path, NEW_ITEM_TEXTURE_DIR, OLD_ITEM_TEXTURE_DIR, UnaryOperator.identity());
 		}
 		return null;
 	}

@@ -122,6 +122,7 @@
   "dirt_path_side": "grass_path_side",
 
   "farmland": "farmland_dry",
+  "farmland_moist": "farmland_wet",
 
   "oak_log": "log_oak",
   "oak_log_top": "log_oak_top",
@@ -214,6 +215,20 @@
 
   "short_grass": "tallgrass",
   "dead_bush": "deadbush",
+  "cobweb": "web",
+  "lily_pad": "waterlily",
+  "sugar_cane": "reeds",
+  "nether_portal": "portal",
+  "spawner": "mob_spawner",
+  "slime_block": "slime",
+  "wet_sponge": "sponge_wet",
+  "note_block": "noteblock",
+  "nether_bricks": "nether_brick",
+  "tripwire": "trip_wire",
+  "tripwire_hook": "trip_wire_source",
+  "end_portal_frame_top": "endframe_top",
+  "end_portal_frame_side": "endframe_side",
+  "end_portal_frame_eye": "endframe_eye",
 
   "wheat_stage0": "wheat_stage_0",
   "wheat_stage1": "wheat_stage_1",
@@ -234,6 +249,9 @@
   "nether_wart_stage0": "nether_wart_stage_0",
   "nether_wart_stage1": "nether_wart_stage_1",
   "nether_wart_stage2": "nether_wart_stage_2",
+  "cocoa_stage0": "cocoa_stage_0",
+  "cocoa_stage1": "cocoa_stage_1",
+  "cocoa_stage2": "cocoa_stage_2",
 
   "nether_quartz_ore": "quartz_ore",
 
