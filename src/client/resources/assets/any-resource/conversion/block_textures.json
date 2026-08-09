@@ -154,8 +154,8 @@
   "acacia_sapling": "sapling_acacia",
   "dark_oak_sapling": "sapling_roofed_oak",
 
-  "oak_door_bottom": "door_oak_lower",
-  "oak_door_top": "door_oak_upper",
+  "oak_door_bottom": "door_wood_lower",
+  "oak_door_top": "door_wood_upper",
   "spruce_door_bottom": "door_spruce_lower",
   "spruce_door_top": "door_spruce_upper",
   "birch_door_bottom": "door_birch_lower",
@@ -168,6 +168,7 @@
   "dark_oak_door_top": "door_dark_oak_upper",
   "iron_door_bottom": "door_iron_lower",
   "iron_door_top": "door_iron_upper",
+  "oak_trapdoor": "trapdoor",
 
   "sunflower_bottom": "double_plant_sunflower_bottom",
   "sunflower_top": "double_plant_sunflower_top",

@@ -142,7 +142,23 @@ that fails silently - an unannounced sprite renders as vanilla's art with nothin
 - [x] Menu buttons and sliders — `widgets.png` split into `gui/sprites/widget/**`; needs the nine-slice `.mcmeta` served too, see section 1b
 - [x] Title screen logo — legacy stores it as two stacked halves, modern as one strip; same filename, so it has to be reassembled
 - [x] Creative Inventory Tabs
-- [ ] Wooden Doors
+- [x] Wooden Doors
+      — two wrong entries in `block_textures.json`, both the same mistake: 1.13 renamed the default wood
+      from `wood` to `oak`, and these were written from the *modern* name pattern instead of being
+      checked against a real 1.8.9 file. `oak_door_bottom`/`oak_door_top` pointed at `door_oak_lower`
+      /`door_oak_upper`, which 1.8.9 never had — the files are `door_wood_lower`/`door_wood_upper` —
+      and `oak_trapdoor` had no entry at all, so it fell through to identity and looked for
+      `blocks/oak_trapdoor.png` where 1.8.9 has plain `trapdoor.png`. Oak doors resolved on 2 of 69
+      packs and oak trapdoors on 1, while every other wood type converted fine. Now 69 and 68. It broke
+      the announcing half too: with no entry, `newBlockName("door_wood_lower")` returned itself, which
+      the atlas does not know.
+      Checked the whole map for the same class of error afterwards — of 225 block entries and 106 item
+      entries these were the only ones pointing at a 1.8.9 file that does not exist.
+      Still to do: the five other wood trapdoors (spruce, birch, jungle, acacia, dark oak) and the
+      modern wood doors (mangrove, cherry, bamboo, crimson, warped, pale oak) have no 1.8.9 counterpart
+      at all — 1.8.9 had exactly one wooden trapdoor. Pointing them all at the pack's single `trapdoor`
+      would make the inverse map ambiguous and give a birch trapdoor oak art, so it is a judgement call
+      rather than a fix; deriving them from the pack's own planks is the better answer.
 
 # Issue
 - [x] Some scaling is happening to block textures in some pack, causing all blocks to look blurry, including blocks using vanilla textures
