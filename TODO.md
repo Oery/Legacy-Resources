@@ -466,6 +466,10 @@ that fails silently - an unannounced sprite renders as vanilla's art with nothin
 - [ ] Cauldron with snow inside shows vanilla texture
 - [ ] Trapdoor custom model on bdcraft doesnt look right
 - [ ] cocoa bean has a bad uv mapping (at least on bdcraft)
-- [ ] command blocks are not working
+- [x] Command block textures: 1.8.9's single `command_block` texture is now mapped and announced for
+      all regular, chain, repeating, and conditional command-block faces.
+- [ ] Derive subtype-specific command block textures from the legacy command block: chain, repeating,
+      and conditional command blocks currently share the original block's art, but could gain
+      pack-consistent face details rather than using a direct compatibility mapping.
 - [ ] beds model dont work correctly (bdcraft)
 - [ ] the concrete derived from concrete powder looks too similar to the powder (bdcraft)
