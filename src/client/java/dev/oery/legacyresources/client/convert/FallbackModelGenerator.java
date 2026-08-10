@@ -84,6 +84,23 @@ final class FallbackModelGenerator {
 	}
 
 	/**
+	 * Mature cocoa kept its shape but shifted its UVs by one pixel in 1.13: legacy uses the 7..15
+	 * side band and a 7x7 top, while modern uses 8..16 and 8x8. Texture-only legacy packs therefore
+	 * need this exact old layout rather than modern vanilla's otherwise-identical model.
+	 */
+	static byte[] legacyCocoaStage2Model(String namespace) {
+		String texture = namespace + ":block/cocoa_stage2";
+		String json = "{\"ambientocclusion\":false,\"textures\":{\"particle\":\"" + texture + "\",\"cocoa\":\"" + texture + "\"},\"elements\":["
+			+ "{\"from\":[4,3,7],\"to\":[12,12,15],\"faces\":{"
+			+ "\"down\":{\"uv\":[0,0,7,7],\"texture\":\"#cocoa\"},\"up\":{\"uv\":[0,0,7,7],\"texture\":\"#cocoa\"},"
+			+ "\"north\":{\"uv\":[7,4,15,13],\"texture\":\"#cocoa\"},\"south\":{\"uv\":[7,4,15,13],\"texture\":\"#cocoa\"},"
+			+ "\"west\":{\"uv\":[7,4,15,13],\"texture\":\"#cocoa\"},\"east\":{\"uv\":[7,4,15,13],\"texture\":\"#cocoa\"}}},"
+			+ "{\"from\":[8,12,12],\"to\":[8,16,16],\"faces\":{"
+			+ "\"west\":{\"uv\":[12,0,16,4],\"texture\":\"#cocoa\"},\"east\":{\"uv\":[16,0,12,4],\"texture\":\"#cocoa\"}}}]}";
+		return json.getBytes(StandardCharsets.UTF_8);
+	}
+
+	/**
 	 * Torches (and redstone torches, wall-mounted or not) use vanilla's own thin billboard-style
 	 * template models ({@code template_torch}, {@code template_torch_wall},
 	 * {@code template_redstone_torch}, etc.) - never a full cube - keyed by a {@code "torch"}

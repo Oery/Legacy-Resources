@@ -600,6 +600,9 @@ public final class LegacyPackResources implements PackResources {
 				announceComputedModel(namespace, stem, output);
 			}
 		}
+		if (namespace.equals("minecraft") && directoryCovers(directory, "models/block") && cocoaStage2TextureExists()) {
+			announceComputedModel(namespace, "cocoa_stage2", output);
+		}
 		if (jsonTreeQueried(directory, MODEL_ROOT) || jsonTreeQueried(directory, BLOCKSTATES_ROOT)) {
 			// Models and blockstates only ever reach the game through listing - ModelManager and
 			// BlockStateModelLoader each scan their whole tree in one go (FileToIdConverter.json("models")
@@ -1567,6 +1570,11 @@ public final class LegacyPackResources implements PackResources {
 		return redstoneDustLineSource() != null;
 	}
 
+	/** Whether the pack supplies the mature cocoa texture whose legacy UV layout must be retained. */
+	private boolean cocoaStage2TextureExists() {
+		return textureResolves("minecraft", NEW_BLOCK_TEXTURE_DIR, "cocoa_stage2");
+	}
+
 	private @Nullable IoSupplier<InputStream> redstoneDustLineSource() {
 		return delegate.getResource(
 			PackType.CLIENT_RESOURCES, Identifier.fromNamespaceAndPath("minecraft", OLD_BLOCK_TEXTURE_DIR + "redstone_dust_line.png")
@@ -1625,6 +1633,9 @@ public final class LegacyPackResources implements PackResources {
 			String parent = stem.startsWith("redstone_dust_side_alt") ? "redstone_dust_side_alt" : "redstone_dust_side";
 			String textureStem = ns ? REDSTONE_DUST_LINE_NS_STEM : REDSTONE_DUST_LINE_EW_STEM;
 			return FallbackModelGenerator.redstoneDustSideModel(parent, LegacyResources.MOD_ID, textureStem);
+		}
+		if (stem.equals("cocoa_stage2") && cocoaStage2TextureExists()) {
+			return FallbackModelGenerator.legacyCocoaStage2Model(namespace);
 		}
 		if (TORCH_MODEL_TEMPLATES.containsKey(stem)) {
 			String textureStem = TORCH_MODEL_TEXTURE_STEM.get(stem);
