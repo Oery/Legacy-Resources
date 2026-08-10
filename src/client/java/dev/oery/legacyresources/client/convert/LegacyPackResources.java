@@ -109,6 +109,17 @@ public final class LegacyPackResources implements PackResources {
 		"redstone_wall_torch", "redstone_torch",
 		"redstone_wall_torch_off", "redstone_torch_off"
 	);
+	/** Soul torches have no legacy model names; these are rebound copies of the pack's normal torches. */
+	private static final Map<String, String> SOUL_TORCH_MODEL_SOURCES = Map.of(
+		"soul_torch", "torch",
+		"soul_wall_torch", "torch_wall",
+		"soul_torch_item", "torch_item"
+	);
+	private static final Map<String, String> COPPER_TORCH_MODEL_SOURCES = Map.of(
+		"copper_torch", "torch",
+		"copper_wall_torch", "torch_wall",
+		"copper_torch_item", "torch_item"
+	);
 	/**
 	 * Entity textures that later gained biome/variant splits (e.g. cows: temperate/warm/cold,
 	 * mooshroom: red/brown) and moved off the single filename legacy packs know. Only the
@@ -603,6 +614,22 @@ public final class LegacyPackResources implements PackResources {
 		if (namespace.equals("minecraft") && directoryCovers(directory, "models/block") && cocoaStage2TextureExists()) {
 			announceComputedModel(namespace, "cocoa_stage2", output);
 		}
+		if (namespace.equals("minecraft") && directoryCovers(directory, "models/block") && hasCustomSoulTorchModels(namespace)) {
+			for (String stem : SOUL_TORCH_MODEL_SOURCES.keySet()) {
+				announceComputedModel(namespace, stem, output);
+			}
+		}
+		if (namespace.equals("minecraft") && directoryCovers(directory, "models/item") && hasCustomSoulTorchItemModel(namespace)) {
+			announceComputedItemModel(namespace, "soul_torch", output);
+		}
+		if (namespace.equals("minecraft") && directoryCovers(directory, "models/block") && hasCustomCopperTorchModels(namespace)) {
+			for (String stem : COPPER_TORCH_MODEL_SOURCES.keySet()) {
+				announceComputedModel(namespace, stem, output);
+			}
+		}
+		if (namespace.equals("minecraft") && directoryCovers(directory, "models/item") && hasCustomCopperTorchItemModel(namespace)) {
+			announceComputedItemModel(namespace, "copper_torch", output);
+		}
 		if (jsonTreeQueried(directory, MODEL_ROOT) || jsonTreeQueried(directory, BLOCKSTATES_ROOT)) {
 			// Models and blockstates only ever reach the game through listing - ModelManager and
 			// BlockStateModelLoader each scan their whole tree in one go (FileToIdConverter.json("models")
@@ -696,6 +723,14 @@ public final class LegacyPackResources implements PackResources {
 
 	private void announceComputedModel(String namespace, String stem, PackResources.ResourceOutput output) {
 		Identifier id = Identifier.fromNamespaceAndPath(namespace, MODEL_BLOCK_DIR + stem + ".json");
+		IoSupplier<InputStream> resource = getResource(PackType.CLIENT_RESOURCES, id);
+		if (resource != null) {
+			output.accept(id, resource);
+		}
+	}
+
+	private void announceComputedItemModel(String namespace, String stem, PackResources.ResourceOutput output) {
+		Identifier id = Identifier.fromNamespaceAndPath(namespace, MODEL_ITEM_DIR + stem + JSON_SUFFIX);
 		IoSupplier<InputStream> resource = getResource(PackType.CLIENT_RESOURCES, id);
 		if (resource != null) {
 			output.accept(id, resource);
@@ -902,10 +937,25 @@ public final class LegacyPackResources implements PackResources {
 			// A derivation that declines even one frame is safer falling back to vanilla than gaining a
 			// shortened, desynchronised animation.
 			if (output.getValue().size() == frames) {
-				stacked.put(output.getKey(), stackAnimationFrames(output.getValue()));
+				// One derivation can produce several independent textures. Deepslate, for example,
+				// reads every ore so it can emit every ore, but an animated redstone source must not
+				// turn a static diamond source into ten copied diamond frames.
+				stacked.put(
+					output.getKey(), outputFollowsAnimation(derivation, output.getKey(), sources)
+						? stackAnimationFrames(output.getValue()) : output.getValue().getFirst()
+				);
 			}
 		}
 		return stacked;
+	}
+
+	private boolean outputFollowsAnimation(Derivation derivation, String output, Map<String, BufferedImage> sources) {
+		String source = derivation.animationSource(output);
+		if (source != null) {
+			BufferedImage image = sources.get(source);
+			return image != null && isAnimatedSource(source, image);
+		}
+		return sources.entrySet().stream().anyMatch(entry -> isAnimatedSource(entry.getKey(), entry.getValue()));
 	}
 
 	private int sharedAnimationFrameCount(Map<String, BufferedImage> sources) {
@@ -1743,6 +1793,24 @@ public final class LegacyPackResources implements PackResources {
 		if (stem.equals("cocoa_stage2") && cocoaStage2TextureExists()) {
 			return FallbackModelGenerator.legacyCocoaStage2Model(namespace);
 		}
+		if (SOUL_TORCH_MODEL_SOURCES.containsKey(stem)) {
+			byte[] custom = soulTorchModel(location, stem);
+			if (custom != null) {
+				return custom;
+			}
+			return textureResolves(namespace, NEW_BLOCK_TEXTURE_DIR, "soul_torch")
+				? FallbackModelGenerator.torchModel(namespace, TORCH_MODEL_TEMPLATES.get(stem.equals("soul_torch") ? "torch" : "wall_torch"), "soul_torch")
+				: null;
+		}
+		if (COPPER_TORCH_MODEL_SOURCES.containsKey(stem)) {
+			byte[] custom = copperTorchModel(location, stem);
+			if (custom != null) {
+				return custom;
+			}
+			return textureResolves(namespace, NEW_BLOCK_TEXTURE_DIR, "copper_torch")
+				? FallbackModelGenerator.torchModel(namespace, TORCH_MODEL_TEMPLATES.get(stem.equals("copper_torch") ? "torch" : "wall_torch"), "copper_torch")
+				: null;
+		}
 		if (TORCH_MODEL_TEMPLATES.containsKey(stem)) {
 			String textureStem = TORCH_MODEL_TEXTURE_STEM.get(stem);
 			return textureResolves(namespace, NEW_BLOCK_TEXTURE_DIR, textureStem)
@@ -1766,7 +1834,71 @@ public final class LegacyPackResources implements PackResources {
 		return null;
 	}
 
+	/** Converts the pack's regular torch geometry, then rebinds it to the two soul-fire sprites. */
+	private byte @Nullable [] soulTorchModel(Identifier requested, String soulStem) {
+		String sourceStem = SOUL_TORCH_MODEL_SOURCES.get(soulStem);
+		Identifier source = requested.withPath(MODEL_BLOCK_DIR + sourceStem + JSON_SUFFIX);
+		if (!packHas(source)) {
+			return null;
+		}
+		byte[] converted = computeBlockModel(source, sourceStem);
+		if (converted == null) {
+			return null;
+		}
+		try {
+			JsonElement parsed = JsonParser.parseString(new String(converted, StandardCharsets.UTF_8));
+			if (!parsed.isJsonObject()) return null;
+			JsonObject model = parsed.getAsJsonObject();
+			JsonElement textures = model.get(TEXTURES_KEY);
+			if (textures == null || !textures.isJsonObject()) return null;
+			JsonObject bindings = textures.getAsJsonObject();
+			bindings.addProperty("torch", requested.getNamespace() + ":block/soul_torch");
+			// A custom torch model may contain billboard flame geometry in addition to the torch head.
+			// Rebinding it keeps PureBDcraft's shape and UVs while ensuring that flame is blue too.
+			if (bindings.has("fire")) {
+				bindings.addProperty("fire", requested.getNamespace() + ":block/legacy_soul_torch_fire");
+			}
+			return GSON.toJson(model).getBytes(StandardCharsets.UTF_8);
+		} catch (JsonParseException e) {
+			return null;
+		}
+	}
+
+	/** Copper counterpart of {@link #soulTorchModel}: same custom geometry, green torch and flame bindings. */
+	private byte @Nullable [] copperTorchModel(Identifier requested, String copperStem) {
+		String sourceStem = COPPER_TORCH_MODEL_SOURCES.get(copperStem);
+		Identifier source = requested.withPath(MODEL_BLOCK_DIR + sourceStem + JSON_SUFFIX);
+		if (!packHas(source)) return null;
+		byte[] converted = computeBlockModel(source, sourceStem);
+		if (converted == null) return null;
+		try {
+			JsonElement parsed = JsonParser.parseString(new String(converted, StandardCharsets.UTF_8));
+			if (!parsed.isJsonObject()) return null;
+			JsonObject model = parsed.getAsJsonObject();
+			JsonElement textures = model.get(TEXTURES_KEY);
+			if (textures == null || !textures.isJsonObject()) return null;
+			JsonObject bindings = textures.getAsJsonObject();
+			bindings.addProperty("torch", requested.getNamespace() + ":block/copper_torch");
+			if (bindings.has("fire")) bindings.addProperty("fire", requested.getNamespace() + ":block/legacy_copper_torch_fire");
+			return GSON.toJson(model).getBytes(StandardCharsets.UTF_8);
+		} catch (JsonParseException e) {
+			return null;
+		}
+	}
+
 	private byte @Nullable [] computeItemModel(Identifier location, String stem) {
+		if (stem.equals("soul_torch")) {
+			byte[] custom = soulTorchItemModel(location);
+			if (custom != null) {
+				return custom;
+			}
+		}
+		if (stem.equals("copper_torch")) {
+			byte[] custom = copperTorchItemModel(location);
+			if (custom != null) {
+				return custom;
+			}
+		}
 		if (packHas(location)) {
 			return tryRewriteModel(location, null);
 		}
@@ -1778,6 +1910,39 @@ public final class LegacyPackResources implements PackResources {
 			return FallbackModelGenerator.generatedItemModel(namespace, "block/" + stem);
 		}
 		return null;
+	}
+
+	/** Rebinds a custom held-torch model to the matching synthesized soul-torch parent. */
+	private byte @Nullable [] soulTorchItemModel(Identifier requested) {
+		Identifier source = requested.withPath(MODEL_ITEM_DIR + "torch" + JSON_SUFFIX);
+		if (!packHas(source)) return null;
+		byte[] converted = computeItemModel(source, "torch");
+		if (converted == null) return null;
+		try {
+			JsonElement parsed = JsonParser.parseString(new String(converted, StandardCharsets.UTF_8));
+			if (!parsed.isJsonObject()) return null;
+			JsonObject model = parsed.getAsJsonObject();
+			model.addProperty(PARENT_KEY, requested.getNamespace() + ":block/soul_torch_item");
+			return GSON.toJson(model).getBytes(StandardCharsets.UTF_8);
+		} catch (JsonParseException e) {
+			return null;
+		}
+	}
+
+	private byte @Nullable [] copperTorchItemModel(Identifier requested) {
+		Identifier source = requested.withPath(MODEL_ITEM_DIR + "torch" + JSON_SUFFIX);
+		if (!packHas(source)) return null;
+		byte[] converted = computeItemModel(source, "torch");
+		if (converted == null) return null;
+		try {
+			JsonElement parsed = JsonParser.parseString(new String(converted, StandardCharsets.UTF_8));
+			if (!parsed.isJsonObject()) return null;
+			JsonObject model = parsed.getAsJsonObject();
+			model.addProperty(PARENT_KEY, requested.getNamespace() + ":block/copper_torch_item");
+			return GSON.toJson(model).getBytes(StandardCharsets.UTF_8);
+		} catch (JsonParseException e) {
+			return null;
+		}
 	}
 
 	/** The dye colour for an aliased legacy bed model, or {@code null} for its original identifier. */
@@ -1802,6 +1967,24 @@ public final class LegacyPackResources implements PackResources {
 
 	private boolean hasCustomLegacyBedModels(String namespace) {
 		return packBlockModelExists(namespace, "bed_head") && packBlockModelExists(namespace, "bed_foot");
+	}
+
+	private boolean hasCustomSoulTorchModels(String namespace) {
+		return SOUL_TORCH_MODEL_SOURCES.values().stream().anyMatch(stem -> packBlockModelExists(namespace, stem));
+	}
+
+	private boolean hasCustomSoulTorchItemModel(String namespace) {
+		return packHas(Identifier.fromNamespaceAndPath(namespace, MODEL_ITEM_DIR + "torch" + JSON_SUFFIX))
+			&& packBlockModelExists(namespace, "torch_item");
+	}
+
+	private boolean hasCustomCopperTorchModels(String namespace) {
+		return COPPER_TORCH_MODEL_SOURCES.values().stream().anyMatch(stem -> packBlockModelExists(namespace, stem));
+	}
+
+	private boolean hasCustomCopperTorchItemModel(String namespace) {
+		return packHas(Identifier.fromNamespaceAndPath(namespace, MODEL_ITEM_DIR + "torch" + JSON_SUFFIX))
+			&& packBlockModelExists(namespace, "torch_item");
 	}
 
 	/**
