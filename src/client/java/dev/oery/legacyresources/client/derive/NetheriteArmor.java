@@ -5,9 +5,9 @@ import java.util.Map;
 
 /**
  * The netherite armour set - the four item icons plus the layers drawn on the player - recoloured
- * from the pack's diamond armour. See {@link MetalRecolor} for how the recolour works.
+ * from the pack's diamond armour. See {@link RampRecolor} for how the recolour works.
  */
-final class NetheriteArmor extends MetalRecolor {
+final class NetheriteArmor extends RampRecolor {
 	private static final Map<String, String> PIECES = armor("diamond", "netherite");
 
 	@Override
@@ -20,7 +20,7 @@ final class NetheriteArmor extends MetalRecolor {
 		return PIECES;
 	}
 
-	/** Tuned in the lab across the pack corpus; see {@link MetalRecolor#params} for what each does. */
+	/** Tuned in the lab across the pack corpus; see {@link RampRecolor#params} for what each does. */
 	@Override
 	public List<Param> params() {
 		return List.of(

@@ -16,12 +16,19 @@ import org.jspecify.annotations.Nullable;
 public final class Derivations {
 	public static final List<Derivation> ALL = List.of(
 		new SuspiciousGravel(),
+		new SuspiciousSand(),
 		new NetheriteArmor(),
 		new NetheriteTools(),
 		new CopperArmor(),
 		new CopperTools(),
 		new Beds(),
-		new DirtPath()
+		new DirtPath(),
+		new ConcretePowder(),
+		new Concrete(),
+		new WhiteDye(),
+		new BlackDye(),
+		new BlueDye(),
+		new BrownDye()
 	);
 
 	private static final Map<String, Derivation> BY_OUTPUT = indexByOutput();

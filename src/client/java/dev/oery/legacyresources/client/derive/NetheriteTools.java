@@ -4,7 +4,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The netherite tools, recoloured from the pack's diamond tools. See {@link MetalRecolor} for how the
+ * The netherite tools, recoloured from the pack's diamond tools. See {@link RampRecolor} for how the
  * recolour works.
  * <p>
  * A separate derivation from {@link NetheriteArmor} rather than more entries in the same map, so the
@@ -17,7 +17,7 @@ import java.util.Map;
  * netherite handles are warm browns rather than the diamond tool's original wood. {@link CopperTools}
  * is the same set under the opposite rule, and carries the note on why.
  */
-final class NetheriteTools extends MetalRecolor {
+final class NetheriteTools extends RampRecolor {
 	private static final Map<String, String> PIECES = tools("diamond", "netherite");
 
 	@Override
@@ -31,7 +31,7 @@ final class NetheriteTools extends MetalRecolor {
 	}
 
 	/**
-	 * Tuned in the lab across the pack corpus; see {@link MetalRecolor#params} for what each does.
+	 * Tuned in the lab across the pack corpus; see {@link RampRecolor#params} for what each does.
 	 * Close to {@link NetheriteArmor}'s but not identical - the tools carry slightly more of the
 	 * pack's own hue and a warmer highlight, which is what the two sets were judged to need
 	 * side by side.

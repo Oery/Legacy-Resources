@@ -5,7 +5,7 @@ import java.util.Map;
 
 /**
  * The copper armour set - the four item icons plus the layers drawn on the player - recoloured from
- * the pack's iron armour. See {@link MetalRecolor} for how the recolour works.
+ * the pack's iron armour. See {@link RampRecolor} for how the recolour works.
  * <p>
  * Iron is the right source for copper for the same reason diamond is for netherite: vanilla drew the
  * second set by repainting the first. In 26.2 the iron and copper icons agree on the alpha of all 256
@@ -15,7 +15,7 @@ import java.util.Map;
  * <p>
  * The armour set carries no mask, having no wood on it; {@link CopperTools} is the half that does.
  */
-final class CopperArmor extends MetalRecolor {
+final class CopperArmor extends RampRecolor {
 	private static final Map<String, String> PIECES = armor("iron", "copper");
 
 	@Override
@@ -28,7 +28,7 @@ final class CopperArmor extends MetalRecolor {
 		return PIECES;
 	}
 
-	/** Tuned in the lab across the pack corpus; see {@link MetalRecolor#params} for what each does. */
+	/** Tuned in the lab across the pack corpus; see {@link RampRecolor#params} for what each does. */
 	@Override
 	public List<Param> params() {
 		return List.of(

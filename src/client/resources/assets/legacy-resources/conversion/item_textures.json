@@ -47,7 +47,6 @@
   "spruce_door": "door_spruce",
   "oak_door": "door_wood",
 
-  "white_dye": "dye_powder_white",
   "orange_dye": "dye_powder_orange",
   "magenta_dye": "dye_powder_magenta",
   "light_blue_dye": "dye_powder_light_blue",
@@ -58,11 +57,8 @@
   "light_gray_dye": "dye_powder_silver",
   "cyan_dye": "dye_powder_cyan",
   "purple_dye": "dye_powder_purple",
-  "blue_dye": "dye_powder_blue",
-  "brown_dye": "dye_powder_brown",
   "green_dye": "dye_powder_green",
   "red_dye": "dye_powder_red",
-  "black_dye": "dye_powder_black",
 
   "music_disc_11": "record_11",
   "music_disc_13": "record_13",
@@ -117,6 +113,9 @@
   "writable_book": "book_writable",
 
   "bone_meal": "dye_powder_white",
+  "ink_sac": "dye_powder_black",
+  "lapis_lazuli": "dye_powder_blue",
+  "cocoa_beans": "dye_powder_brown",
 
   "fire_charge": "fireball"
 }

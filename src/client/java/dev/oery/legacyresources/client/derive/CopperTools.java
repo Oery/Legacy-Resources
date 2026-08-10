@@ -11,7 +11,7 @@ import java.util.function.IntPredicate;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The copper tools, recoloured from the pack's iron tools. See {@link MetalRecolor} for how the
+ * The copper tools, recoloured from the pack's iron tools. See {@link RampRecolor} for how the
  * recolour works, and {@link CopperArmor} for why iron is the source.
  * <p>
  * A separate derivation from {@link CopperArmor} rather than more entries in the same map, so the two
@@ -24,7 +24,7 @@ import org.jspecify.annotations.Nullable;
  * changes metal. Netherite goes the other way and burns its handles warm, so the two sets need
  * opposite rules rather than one shared one.
  */
-final class CopperTools extends MetalRecolor {
+final class CopperTools extends RampRecolor {
 	private static final Map<String, String> PIECES = tools("iron", "copper");
 
 	/**
@@ -59,7 +59,7 @@ final class CopperTools extends MetalRecolor {
 	}
 
 	/**
-	 * Tuned in the lab across the pack corpus; see {@link MetalRecolor#params} for the nine shared ones
+	 * Tuned in the lab across the pack corpus; see {@link RampRecolor#params} for the nine shared ones
 	 * and {@link #metal} for the two below them.
 	 */
 	@Override
@@ -121,7 +121,7 @@ final class CopperTools extends MetalRecolor {
 	 * output. No corpus pack ends up there any more, though ALFaithful comes close at 1%: it genuinely
 	 * repaints all but a sliver of its tool between tiers. A pack that answers <em>everything</em> is
 	 * not-metal - one whose other tiers are unrestyled copies of its iron - leaves
-	 * {@link MetalRecolor}'s ramp no pixels to measure, and the whole set declines to vanilla. No corpus
+	 * {@link RampRecolor}'s ramp no pixels to measure, and the whole set declines to vanilla. No corpus
 	 * pack does that either.
 	 */
 	@Override

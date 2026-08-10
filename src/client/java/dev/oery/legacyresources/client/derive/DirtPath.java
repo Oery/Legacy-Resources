@@ -95,7 +95,7 @@ final class DirtPath implements Derivation {
 		if (dirt == null || Ops.scaleOf(dirt) == 0) {
 			return Map.of();
 		}
-		Palette palette = Palette.of(dirt, params);
+		Palette palette = paletteOf(dirt, params);
 		if (palette == null) {
 			return Map.of();
 		}
@@ -105,7 +105,7 @@ final class DirtPath implements Derivation {
 		// A pack with dirt but no usable grass top still gets its side; the top falls back to vanilla's
 		// rather than being invented out of the only other thing to hand, which is the dirt itself.
 		if (grassTop != null && Ops.scaleOf(grassTop) != 0) {
-			derived.put(TOP, palette.repaint(grassTop, params));
+			derived.put(TOP, repaint(palette, grassTop, params));
 		}
 		derived.put(SIDE, side(dirt, sources.get(OVERLAY), palette, params));
 		return derived;
@@ -122,7 +122,7 @@ final class DirtPath implements Derivation {
 		int scale = size / Ops.BASE_SIZE;
 		int depth = params.getInt("crust_rows") * scale;
 		int[] base = Ops.pixels(dirt);
-		int[] crust = Ops.pixels(palette.repaint(dirt, params));
+		int[] crust = Ops.pixels(repaint(palette, dirt, params));
 		int[] mask = maskOf(overlay, size);
 
 		int[] out = new int[base.length];
@@ -170,91 +170,43 @@ final class DirtPath implements Derivation {
 	 * Hue is a saturation-weighted circular mean, not an average of angles - dirt sits close enough to
 	 * the wheel's origin that a pack straddling it would otherwise average its reds and its magentas
 	 * into the blue-green on the far side.
+	 *
+	 * @return {@code null} if the pack's dirt is entirely transparent, which has no palette to take
 	 */
-	private record Palette(double hue, double saturation, double mean) {
-		static @Nullable Palette of(BufferedImage dirt, Params params) {
-			int[] pixels = Ops.pixels(dirt);
-			double x = 0;
-			double y = 0;
-			double saturation = 0;
-			double luminance = 0;
-			long count = 0;
-			for (int argb : pixels) {
-				if (Ops.alpha(argb) == 0) {
-					continue;
-				}
-				float[] hsb = Color.RGBtoHSB(Ops.red(argb), Ops.green(argb), Ops.blue(argb), null);
-				double angle = 2 * Math.PI * hsb[0];
-				x += hsb[1] * Math.cos(angle);
-				y += hsb[1] * Math.sin(angle);
-				saturation += hsb[1];
-				luminance += Ops.luminance(argb);
-				count++;
+	private static @Nullable Palette paletteOf(BufferedImage dirt, Params params) {
+		int[] pixels = Ops.pixels(dirt);
+		double x = 0;
+		double y = 0;
+		double saturation = 0;
+		double luminance = 0;
+		long count = 0;
+		for (int argb : pixels) {
+			if (Ops.alpha(argb) == 0) {
+				continue;
 			}
-			// A dirt texture that is entirely transparent has no palette to take.
-			if (count == 0) {
-				return null;
-			}
-			// A wholly grey dirt leaves the circular mean at the origin, where the angle is arbitrary;
-			// its saturation is 0 too, so the hue it lands on can never be seen.
-			double hue = x == 0 && y == 0 ? 0 : Math.atan2(y, x) / (2 * Math.PI);
-			return new Palette(
-				hue + params.get("hue_shift") / 360.0,
-				saturation / count * params.get("saturation_scale"),
-				luminance / count * params.get("mean_lift")
-			);
+			float[] hsb = Color.RGBtoHSB(Ops.red(argb), Ops.green(argb), Ops.blue(argb), null);
+			double angle = 2 * Math.PI * hsb[0];
+			x += hsb[1] * Math.cos(angle);
+			y += hsb[1] * Math.sin(angle);
+			saturation += hsb[1];
+			luminance += Ops.luminance(argb);
+			count++;
 		}
-
-		/**
-		 * {@code source}'s luminance structure, re-levelled onto this palette's band and painted in its
-		 * colour.
-		 * <p>
-		 * Levelled against the source's own mean and spread rather than a fixed range, which is what
-		 * lets the same operation serve a grass top and a dirt: whatever either one's own contrast is,
-		 * both come out on the same palette, so the top face and the side's crust agree.
-		 */
-		BufferedImage repaint(BufferedImage source, Params params) {
-			int[] pixels = Ops.pixels(source);
-			double sourceMean = 0;
-			double sourceSquares = 0;
-			long count = 0;
-			for (int argb : pixels) {
-				if (Ops.alpha(argb) != 0) {
-					double value = Ops.luminance(argb);
-					sourceMean += value;
-					sourceSquares += value * value;
-					count++;
-				}
-			}
-			double deviation = 0;
-			if (count > 0) {
-				sourceMean /= count;
-				deviation = Math.sqrt(Math.max(0, sourceSquares / count - sourceMean * sourceMean));
-			}
-			// A flat source has no structure to re-level, and every pixel simply lands on the mean.
-			double gain = deviation <= 0 ? 0 : Math.min(params.get("spread") / deviation, params.get("max_gain"));
-			int levels = params.getInt("levels");
-			// The band runs roughly two deviations either side of the mean, so that is what the
-			// requested number of shades divides up.
-			double step = levels <= 0 ? 0 : 4 * params.get("spread") / levels;
-
-			int[] out = new int[pixels.length];
-			for (int i = 0; i < pixels.length; i++) {
-				int argb = pixels[i];
-				if (Ops.alpha(argb) == 0) {
-					out[i] = 0;
-					continue;
-				}
-				double value = mean + (Ops.luminance(argb) - sourceMean) * gain;
-				if (step > 0) {
-					value = mean + Math.round((value - mean) / step) * step;
-				}
-				out[i] = Ops.withAlpha(
-					Ops.atLuminance(hue, saturation, Math.clamp(value, 0, 255)),
-					Ops.alpha(argb)
-				);
-			}
-			return Ops.image(out, source.getWidth(), source.getHeight());
+		if (count == 0) {
+			return null;
 		}
+		// A wholly grey dirt leaves the circular mean at the origin, where the angle is arbitrary;
+		// its saturation is 0 too, so the hue it lands on can never be seen.
+		double hue = x == 0 && y == 0 ? 0 : Math.atan2(y, x) / (2 * Math.PI);
+		return new Palette(
+			hue + params.get("hue_shift") / 360.0,
+			saturation / count * params.get("saturation_scale"),
+			luminance / count * params.get("mean_lift")
+		);
+	}
+
+	/** {@link Palette#repaint} under this derivation's names for its three shaping constants. */
+	private static BufferedImage repaint(Palette palette, BufferedImage source, Params params) {
+		return palette.repaint(source, params.get("spread"), params.get("max_gain"), params.getInt("levels"));
 	}
 }

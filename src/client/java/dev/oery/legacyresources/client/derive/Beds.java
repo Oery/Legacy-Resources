@@ -36,7 +36,7 @@ import org.jspecify.annotations.Nullable;
  * red built like any other dye. The other fifteen take that same art and move only its cloth onto vanilla's
  * ramp for their dye, so they keep the pack's shading, weave and contrast while reading unmistakably as
  * their colour. Beds are identified by colour at a glance and a bed that came out "faintly the pack's
- * hue" would be a bed you cannot name, so unlike {@link MetalRecolor} nothing of the source hue is
+ * hue" would be a bed you cannot name, so unlike {@link RampRecolor} nothing of the source hue is
  * held back.
  * <p>
  * No item texture is involved: modern {@code items/<colour>_bed.json} is a {@code minecraft:composite}

@@ -10,10 +10,15 @@ import java.util.Map;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Recolours a set of the pack's textures of one metal into the matching set in another. Subclassed per
- * set: {@link NetheriteArmor}, {@link NetheriteTools}, {@link CopperArmor}, {@link CopperTools}.
+ * Recolours a set of the pack's textures into the matching set in another material, by remapping the
+ * luminance ramp they occupy. Subclassed per set: the four metal sets {@link NetheriteArmor},
+ * {@link NetheriteTools}, {@link CopperArmor} and {@link CopperTools}, and the dyes 1.8.9 had no
+ * separate item for, via {@link DyeRecolor}.
  * <p>
- * Both pairs vanilla ships are the same artwork twice, which is what makes the transform learnable
+ * The metals are what this was written for and what the numbers below were measured on; a dye set is
+ * the same problem one texture at a time, and reads the same nine constants.
+ * <p>
+ * Both metal pairs vanilla ships are the same artwork twice, which is what makes the transform learnable
  * rather than something to eyeball. Comparing 26.2's files pixel for pixel, diamond and netherite agree
  * on 246 of 256 alpha values for the armour icons and 1953 of 2048 for the worn layer; iron and copper
  * agree on <em>every</em> one of them, across all nine icons and all three layers. What is left in each
@@ -39,7 +44,7 @@ import org.jspecify.annotations.Nullable;
  * Unlike most derivations this one has no geometry, so it imposes no size or squareness requirement -
  * which it could not anyway, since the worn armour layers are 64x32.
  */
-abstract class MetalRecolor implements Derivation {
+abstract class RampRecolor implements Derivation {
 	/** Source texture to the texture it produces. Subclasses should return a cached, ordered map. */
 	protected abstract Map<String, String> pieces();
 

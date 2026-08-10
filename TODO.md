@@ -27,7 +27,7 @@ that fails silently - an unannounced sprite renders as vanilla's art with nothin
       sword/pickaxe/axe/shovel/hoe. Vanilla drew copper by repainting iron and nothing else — the two
       agree on the alpha of *every* pixel of all nine icons and all three layers, a cleaner match than
       diamond and netherite manage — so the same relative-ramp remap applies, now shared as
-      `MetalRecolor`. Control lands at **0.50% for the tools and 2.20% for the armour**; the armour's
+      `RampRecolor`. Control lands at **0.50% for the tools and 2.20% for the armour**; the armour's
       residual is almost all the chestplate at 5.0%, which is the floor, since 1.8.9's chestplate and
       26.2's disagree on 14 of 256 alpha pixels — that art was redrawn between eras and the tools' was
       not. 57 of 69 packs serve and announce every output, none unlisted; the rest lack iron art and
@@ -73,7 +73,7 @@ that fails silently - an unannounced sprite renders as vanilla's art with nothin
       netherite art are the same silhouette twice, so the transform is a pure palette remap and comes
       out within 1-5% of vanilla's own texture on the control. `NetheriteArmor` covers the four item
       icons plus the worn `humanoid`/`humanoid_baby`/`humanoid_leggings` layers; `NetheriteTools`
-      covers sword/pickaxe/axe/shovel/hoe. Both share `MetalRecolor` with the copper sets.
+      covers sword/pickaxe/axe/shovel/hoe. Both share `RampRecolor` with the copper sets.
       Still to do: ingot, scrap, horse armour (needs the equipment translation extended to
       `horse_body`), and the smithing template (no legacy equivalent to derive from).
 - [ ] Suspicious Stew: can be derived from soup
@@ -152,16 +152,78 @@ that fails silently - an unannounced sprite renders as vanilla's art with nothin
       no dirt at all, and no pack has more than half its side repainted. `block_textures.json` also
       now maps `dirt_path_*` to `grass_path_*`, so the 7 packs that shipped real 1.9-1.12 path art use
       their own instead of a derived one.
-- [ ] Concrete powders block: can be derived from sand
+- [x] Concrete powders block: can be derived from sand
+      — `ConcretePowder`, and `Concrete` for the hardened blocks, both off the pack's own sand. The two
+      are the same sixteen colours at two contrasts, so the measurements live in one table
+      (`ConcreteColor`) and each block reads its own column. Nothing of vanilla's *pattern* is copied,
+      and there is nothing there to copy: the powders' noise correlates with vanilla's sand at |r| <
+      0.13 across all sixteen. Only the band is taken — hue, saturation, mean and spread — and the
+      pack's sand is re-levelled onto it by `Palette`, now shared with `DirtPath`. Control lands at
+      **2.00% for the powders and 0.51% for the hardened blocks**; across the corpus every derived
+      colour sits within a few luminance counts of vanilla's own (white powder: vanilla 227.1, corpus
+      median 228.0, range 222-246). Serves and lists all 32 on 59 of 69 packs, none partial, the other
+      10 having no usable sand.
+      Two constants are judgement rather than measurement. `follow_source` (0.35) is how far the band
+      tracks the pack's own sand brightness instead of vanilla's absolute value — 0 makes every pack's
+      white concrete equally white, 1 makes a dark pack's concrete dark, and the default splits it.
+      And `spread_scale` on the hardened block defaults to 2.5 rather than 1: vanilla's concrete is
+      flat to within a deviation of 1, so reproducing it exactly would be sixteen fills in vanilla's
+      own colours — a derivation that derives nothing. Above 1 the pack's grain shows through, which
+      is the whole point of deriving it. Both want an in-game look.
 - [ ] Iron Nuggets / Copper Nuggets: can be derived from gold nuggets
 - [ ] Breeze Rods: can be derived from Blaze Rods
 - [ ] Recovery Compass: can be derived from Compass
 - [ ] Soul fire / soul torch: can be derived from fire / torch
 - [ ] Pillagers: can probably be derived from villagers
 - [ ] Trap doors: from their respective wood (very experimental)
-- [ ] White Dye: should be derived from another dye (magenta for example)
-- [ ] Suspicious Sand: same as suspicious gravel but with sand
+- [x] White Dye: should be derived from another dye (magenta for example)
+      — `WhiteDye` from the pack's magenta, and with it `BlackDye`, `BlueDye` and `BrownDye`, which had
+      the same defect: 1.8.9 had no separate item for any of these four, so `dye_powder_white` *is*
+      bone meal, `dye_powder_black` the ink sac, `dye_powder_blue` lapis and `dye_powder_brown` cocoa
+      beans. `item_textures.json` was handing that art to both members of each pair, so a legacy pack
+      rendered white dye as bone shards and black dye as an ink sac. The four mappings are gone (which
+      is what lets the derivation run at all — `getResource` reaches a derivation only once the pack
+      has nothing of its own), and `ink_sac`, `lapis_lazuli` and `cocoa_beans` are now mapped, having
+      been absent entirely and falling back to vanilla's art while the pack's own went unused.
+      All four are `RampRecolor` (renamed from `MetalRecolor`, since it is a luminance ramp and these
+      are not metals) via `DyeRecolor`, one source to one output, `keep_hue` at 0 — a white dye that
+      keeps the pack's hue is not white, and with the hue gone the choice of source dye is only a
+      choice of which pile is drawn most typically. `auto_level` does the work here and runs at 1.0
+      for white, black and brown: it pins each dye on vanilla's own mean, and the corpus lands within
+      half a count of it (black: vanilla 46.5, corpus 47.0-47.3).
+      **Only the powder is recoloured, not what it sits on.** PureBDcraft draws each dye as a heap on a
+      folded sheet of paper, and repainting the whole icon turned the paper white or black along with
+      the powder. The pack answers which pixels are which the same way it answers handle-versus-head in
+      `CopperTools`: the powder is what it *changed* between its twelve dyes, the sheet is what it did
+      not, asked per pixel and pooled over the other eleven. A tolerance rather than exact equality,
+      because BDcraft's paper catches a faint cast from the powder above it — on an equality test two
+      thirds of the sheet still reads as dye and a tan wedge comes out tinted. The split is not
+      delicate: its paper moves at most 5 counts between dyes and its powder 120 or more, so
+      `dye_change` sits in an empty gap ~60 wide and anywhere in it classifies the same 53% of the
+      icon, pile plus the corner swatch. Inert everywhere else — 58 of the 60 packs with a comparable
+      dye set keep every pixel and the 59th keeps 98.8%, since they draw no backdrop to exclude.
+      Control reads **20.75% white, 13.41% black, 12.32% blue, 14.92% brown**, which needs its floor
+      quoted beside it: the same dye drawn in both eras scores 11.6% to 20.0% against itself (magenta,
+      the source, is 18.15%), because the item was redrawn between 1.8.9 and 26.2 and no recolour can
+      close a silhouette. On the pixel metric black dye even scores *worse* than the ink sac it
+      replaces, 13.41% against 13.59% — an ink sac is a dark blob and black dye is dark, and the
+      metric cannot see that one of them is the wrong item. Judge these by eye. Serves and lists on 52
+      of 69 packs, none partial.
+- [x] Suspicious Sand: same as suspicious gravel but with sand
+      — `SuspiciousSand`, sharing `SuspiciousBlock` with the gravel it was split out of. It wants
+      gravel's exact numbers, which is worth recording because the raw figures suggest otherwise:
+      vanilla's last stage takes 13.2 luminance off sand against only 8.3 off gravel, but sand is the
+      brighter field and as a proportion of each block's own mean those are 6.40% and 6.44%, the same
+      darkening twice. The overlay is a multiply and so is proportional in the same way, landing both
+      blocks at 13.3% of their own mean. Control lands at **5.46%** (gravel's is 7.56%), though the
+      control barely constrains this one — vanilla perturbs individual pixels rather than overlaying
+      anything, and the metric is happiest when the derivation does nothing at all. Serves and lists
+      all four stages on 59 of 69 packs, none partial.
+      Worth noting for whenever gravel gets its in-game look: both blocks darken about twice as hard
+      as vanilla's own art does (13.3% against 6.4%). That is gravel's tuned value carried across
+      deliberately, not a slip, but if the hollow reads too heavy in game it is one number for both.
 - [ ] Honey Blocks: from slime blocks
+- [ ] Frosted Ice: from packed ice or regular ice
 
 # Not Working
 
@@ -404,3 +466,4 @@ that fails silently - an unannounced sprite renders as vanilla's art with nothin
 - [ ] cocoa bean has a bad uv mapping (at least on bdcraft)
 - [ ] command blocks are not working
 - [ ] beds model dont work correctly (bdcraft)
+- [ ] the concrete derived from concrete powder looks too similar to the powder (bdcraft)
