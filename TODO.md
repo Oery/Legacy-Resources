@@ -222,7 +222,9 @@ that fails silently - an unannounced sprite renders as vanilla's art with nothin
       Worth noting for whenever gravel gets its in-game look: both blocks darken about twice as hard
       as vanilla's own art does (13.3% against 6.4%). That is gravel's tuned value carried across
       deliberately, not a slip, but if the hollow reads too heavy in game it is one number for both.
-- [ ] Honey Blocks: from slime blocks
+- [x] Honey Blocks: from slime blocks — `HoneyBlock` repaints the pack's slime mottle into the three
+      vanilla honey face bands, preserving its relative transparency. Serves all three faces or none;
+      standalone validation found 60 usable slime textures in the 83-pack zip corpus.
 - [ ] Frosted Ice: from packed ice or regular ice
 
 # Not Working

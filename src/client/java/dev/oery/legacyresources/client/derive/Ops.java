@@ -221,6 +221,24 @@ public final class Ops {
 	}
 
 	/**
+	 * How bright {@code image} is on average, over its opaque pixels only, or 0 if it has none.
+	 * <p>
+	 * Transparent pixels are excluded rather than counted as black: their colour is arbitrary, and a
+	 * derivation asking how bright a pack draws something means the part of it that can be seen.
+	 */
+	public static double meanLuminance(BufferedImage image) {
+		double total = 0;
+		long count = 0;
+		for (int argb : pixels(image)) {
+			if (alpha(argb) != 0) {
+				total += luminance(argb);
+				count++;
+			}
+		}
+		return count == 0 ? 0 : total / count;
+	}
+
+	/**
 	 * The fully bright form of {@code hue}/{@code saturation}, scaled down until its luminance is
 	 * {@code target}.
 	 * <p>

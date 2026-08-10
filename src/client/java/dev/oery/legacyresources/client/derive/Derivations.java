@@ -25,6 +25,7 @@ public final class Derivations {
 		new DirtPath(),
 		new ConcretePowder(),
 		new Concrete(),
+		new HoneyBlock(),
 		new WhiteDye(),
 		new BlackDye(),
 		new BlueDye(),

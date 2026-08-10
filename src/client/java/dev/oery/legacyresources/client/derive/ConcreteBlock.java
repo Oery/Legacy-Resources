@@ -77,7 +77,7 @@ abstract class ConcreteBlock implements Derivation {
 		if (sand == null || Ops.scaleOf(sand) == 0) {
 			return Map.of();
 		}
-		double mean = meanLuminance(sand);
+		double mean = Ops.meanLuminance(sand);
 		// A wholly transparent sand has no brightness to follow and no structure to repaint.
 		if (mean <= 0) {
 			return Map.of();
@@ -99,18 +99,5 @@ abstract class ConcreteBlock implements Derivation {
 
 	private String texture(ConcreteColor color) {
 		return "block/" + color.colour() + suffix();
-	}
-
-	/** Mean luminance over the opaque pixels, or 0 if there are none. */
-	private static double meanLuminance(BufferedImage image) {
-		double total = 0;
-		long count = 0;
-		for (int argb : Ops.pixels(image)) {
-			if (Ops.alpha(argb) != 0) {
-				total += Ops.luminance(argb);
-				count++;
-			}
-		}
-		return count == 0 ? 0 : total / count;
 	}
 }
