@@ -26,6 +26,8 @@ public final class Derivations {
 		new ConcretePowder(),
 		new Concrete(),
 		new HoneyBlock(),
+		new CherryWood(),
+		new CherryLeaves(),
 		new WhiteDye(),
 		new BlackDye(),
 		new BlueDye(),

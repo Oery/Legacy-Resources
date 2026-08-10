@@ -117,6 +117,12 @@ that fails silently - an unannounced sprite renders as vanilla's art with nothin
       Needs an in-game look. The legacy custom-model path now works, but the bed derivation itself
       should be revisited: its cloth mask still bleeds slightly and the derived side colour does not
       yet match the top as closely as it should.
+- [x] Cherry wood (initial): `CherryWood` derives cherry bark, log end and planks from the pack's oak
+      counterparts. The source art supplies grain and resolution; the three target bands are measured
+      from modern vanilla. Stripped wood and the rest of the cherry set remain separate work.
+- [x] Cherry leaves (initial): `CherryLeaves` repaints the pack's oak canopy to pale pink while retaining
+      its own cutout and branch pattern. Cherry's blossom-cluster silhouette is new art, so this needs an
+      in-game judgement call rather than a pixel-match claim.
 - [x] Path Blocks: can be derived from grass blocks
       — `DirtPath`, both faces. Vanilla's own pair turned out to say exactly how the block is built.
       `dirt_path_side` is `dirt` with the grass block's fringe painted over it: its crust falls on
