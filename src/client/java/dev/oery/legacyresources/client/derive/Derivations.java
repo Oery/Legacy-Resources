@@ -26,6 +26,7 @@ public final class Derivations {
 		new ConcretePowder(),
 		new Concrete(),
 		new HoneyBlock(),
+		new Deepslate(),
 		new CherryWood(),
 		new CherryLeaves(),
 		new PaleOak(),
