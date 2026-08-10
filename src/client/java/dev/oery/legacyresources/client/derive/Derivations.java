@@ -28,6 +28,7 @@ public final class Derivations {
 		new HoneyBlock(),
 		new CherryWood(),
 		new CherryLeaves(),
+		new PaleOak(),
 		new WhiteDye(),
 		new BlackDye(),
 		new BlueDye(),

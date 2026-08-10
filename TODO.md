@@ -123,6 +123,11 @@ that fails silently - an unannounced sprite renders as vanilla's art with nothin
 - [x] Cherry leaves (initial): `CherryLeaves` repaints the pack's oak canopy to pale pink while retaining
       its own cutout and branch pattern. Cherry's blossom-cluster silhouette is new art, so this needs an
       in-game judgement call rather than a pixel-match claim.
+- [x] Pale oak (initial): `PaleOak` derives the log, end, planks and leaves from oak/birch sources. Its
+      bark is a material approximation over oak grain; its distinctive cracked silhouette needs separate
+      work if the initial result does not read well in-game.
+      Log tops infer their bark perimeter from the pack's own edge and centre colours, so rounded HD
+      end grain (such as PureBDcraft's) keeps its real boundary while matching the side bark palette.
 - [x] Path Blocks: can be derived from grass blocks
       — `DirtPath`, both faces. Vanilla's own pair turned out to say exactly how the block is built.
       `dirt_path_side` is `dirt` with the grass block's fringe painted over it: its crust falls on
