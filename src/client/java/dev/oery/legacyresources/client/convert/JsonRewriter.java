@@ -41,6 +41,25 @@ final class JsonRewriter {
 		}
 	}
 
+	/** Rewrites a legacy bed model to the derived sheets matching one modern bed colour. */
+	static JsonObject rewriteBedModel(JsonElement element, String color) {
+		JsonObject model = rewrite(element).getAsJsonObject();
+		JsonElement textures = model.get("textures");
+		if (textures == null || !textures.isJsonObject()) {
+			return model;
+		}
+		for (Map.Entry<String, JsonElement> texture : textures.getAsJsonObject().entrySet()) {
+			if (!texture.getValue().isJsonPrimitive() || !texture.getValue().getAsJsonPrimitive().isString()) {
+				continue;
+			}
+			String path = texture.getValue().getAsString();
+			if (path.startsWith("block/bed_feet_") || path.equals("block/bed_head_top") || path.equals("block/bed_head_side")) {
+				texture.setValue(new JsonPrimitive("block/" + color + "_legacy_" + path.substring("block/".length())));
+			}
+		}
+		return model;
+	}
+
 	private static String rewriteReference(String value) {
 		int colon = value.indexOf(':');
 		String namespace = colon >= 0 ? value.substring(0, colon) : null;

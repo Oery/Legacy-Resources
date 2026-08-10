@@ -94,13 +94,13 @@ final class BlockstateConverter {
 		}
 		JsonObject converted = new JsonObject();
 		if (variants) {
-			JsonObject selectors = convertVariants(namespace, root.get(VARIANTS_KEY), states, modelResolves);
+			JsonObject selectors = convertVariants(namespace, stem, root.get(VARIANTS_KEY), states, modelResolves);
 			if (selectors == null) {
 				return null;
 			}
 			converted.add(VARIANTS_KEY, selectors);
 		} else {
-			JsonArray parts = convertMultipart(namespace, root.get(MULTIPART_KEY), states, modelResolves);
+			JsonArray parts = convertMultipart(namespace, stem, root.get(MULTIPART_KEY), states, modelResolves);
 			if (parts == null) {
 				return null;
 			}
@@ -126,7 +126,7 @@ final class BlockstateConverter {
 	 * subset of states behind - neither is worth shipping over vanilla's own working file.
 	 */
 	private static @Nullable JsonObject convertVariants(
-		String namespace, JsonElement element, StateDefinition<Block, BlockState> states, Predicate<Identifier> modelResolves
+		String namespace, String blockstateStem, JsonElement element, StateDefinition<Block, BlockState> states, Predicate<Identifier> modelResolves
 	) {
 		if (!element.isJsonObject() || element.getAsJsonObject().isEmpty()) {
 			return null;
@@ -139,7 +139,7 @@ final class BlockstateConverter {
 			if (matches == null || out.has(selector)) {
 				return null;
 			}
-			JsonElement variant = convertVariant(namespace, entry.getValue(), modelResolves);
+			JsonElement variant = convertVariant(namespace, blockstateStem, entry.getValue(), modelResolves);
 			if (variant == null) {
 				return null;
 			}
@@ -187,9 +187,9 @@ final class BlockstateConverter {
 	}
 
 	/** A variant is either one model, or a weighted list of them to pick between at random. */
-	private static @Nullable JsonElement convertVariant(String namespace, JsonElement element, Predicate<Identifier> modelResolves) {
+	private static @Nullable JsonElement convertVariant(String namespace, String blockstateStem, JsonElement element, Predicate<Identifier> modelResolves) {
 		if (!element.isJsonArray()) {
-			return convertVariantModel(namespace, element, modelResolves, false);
+			return convertVariantModel(namespace, blockstateStem, element, modelResolves, false);
 		}
 		JsonArray in = element.getAsJsonArray();
 		if (in.isEmpty()) {
@@ -197,7 +197,7 @@ final class BlockstateConverter {
 		}
 		JsonArray out = new JsonArray();
 		for (JsonElement weighted : in) {
-			JsonObject converted = convertVariantModel(namespace, weighted, modelResolves, true);
+			JsonObject converted = convertVariantModel(namespace, blockstateStem, weighted, modelResolves, true);
 			if (converted == null) {
 				return null;
 			}
@@ -214,7 +214,7 @@ final class BlockstateConverter {
 	 * "this block has no model".
 	 */
 	private static @Nullable JsonObject convertVariantModel(
-		String namespace, JsonElement element, Predicate<Identifier> modelResolves, boolean weighted
+		String namespace, String blockstateStem, JsonElement element, Predicate<Identifier> modelResolves, boolean weighted
 	) {
 		if (!element.isJsonObject()) {
 			return null;
@@ -224,7 +224,7 @@ final class BlockstateConverter {
 		if (model == null || !isString(model)) {
 			return null;
 		}
-		Identifier modelId = modelId(namespace, model.getAsString());
+		Identifier modelId = modelId(namespace, blockstateStem, model.getAsString());
 		if (modelId == null || !modelResolves.test(modelId)) {
 			return null;
 		}
@@ -258,7 +258,7 @@ final class BlockstateConverter {
 	 * rather than as a missing model. Only the conditions and the models have to hold up.
 	 */
 	private static @Nullable JsonArray convertMultipart(
-		String namespace, JsonElement element, StateDefinition<Block, BlockState> states, Predicate<Identifier> modelResolves
+		String namespace, String blockstateStem, JsonElement element, StateDefinition<Block, BlockState> states, Predicate<Identifier> modelResolves
 	) {
 		if (!element.isJsonArray() || element.getAsJsonArray().isEmpty()) {
 			return null;
@@ -273,7 +273,7 @@ final class BlockstateConverter {
 			if (apply == null) {
 				return null;
 			}
-			JsonElement variant = convertVariant(namespace, apply, modelResolves);
+			JsonElement variant = convertVariant(namespace, blockstateStem, apply, modelResolves);
 			if (variant == null) {
 				return null;
 			}
@@ -344,14 +344,26 @@ final class BlockstateConverter {
 	 * its own version too, so second-guessing it here would invent a model reference the pack never
 	 * had.
 	 */
-	private static @Nullable Identifier modelId(String namespace, String reference) {
+	private static @Nullable Identifier modelId(String namespace, String blockstateStem, String reference) {
 		int colon = reference.indexOf(':');
 		String modelNamespace = colon < 0 ? namespace : reference.substring(0, colon);
-		String path = ResourceNameMaps.newBlockModelPath(LEGACY_MODEL_DIR + (colon < 0 ? reference : reference.substring(colon + 1)));
+		String modelStem = colon < 0 ? reference : reference.substring(colon + 1);
+		String path = bedModelPath(blockstateStem, modelStem);
 		if (!Identifier.isValidNamespace(modelNamespace) || !Identifier.isValidPath(path)) {
 			return null;
 		}
 		return Identifier.fromNamespaceAndPath(modelNamespace, path);
+	}
+
+	/**
+	 * A coloured modern bed keeps the legacy bed blockstate's rotations (they differ by 180 degrees),
+	 * but points at that colour's rewritten custom model so its derived sheets are used.
+	 */
+	private static String bedModelPath(String blockstateStem, String modelStem) {
+		if ((modelStem.equals("bed_head") || modelStem.equals("bed_foot")) && blockstateStem.endsWith("_bed")) {
+			return LEGACY_MODEL_DIR + blockstateStem + "_" + modelStem.substring("bed_".length());
+		}
+		return LEGACY_MODEL_DIR + modelStem;
 	}
 
 	private static boolean isString(JsonElement element) {

@@ -39,6 +39,26 @@ final class FallbackModelGenerator {
 	}
 
 	/**
+	 * The 1.8.9 bed state layout, expressed through a modern dyed bed's two models. Modern changed
+	 * which facing is unrotated, so its stock bed blockstates cannot be used with legacy geometry.
+	 */
+	static byte[] legacyBedBlockstate(String namespace, String color) {
+		String foot = namespace + ":block/" + color + "_bed_foot";
+		String head = namespace + ":block/" + color + "_bed_head";
+		String json = "{\"variants\":{"
+			+ "\"facing=north,part=foot\":{\"model\":\"" + foot + "\",\"y\":180},"
+			+ "\"facing=east,part=foot\":{\"model\":\"" + foot + "\",\"y\":270},"
+			+ "\"facing=south,part=foot\":{\"model\":\"" + foot + "\"},"
+			+ "\"facing=west,part=foot\":{\"model\":\"" + foot + "\",\"y\":90},"
+			+ "\"facing=north,part=head\":{\"model\":\"" + head + "\",\"y\":180},"
+			+ "\"facing=east,part=head\":{\"model\":\"" + head + "\",\"y\":270},"
+			+ "\"facing=south,part=head\":{\"model\":\"" + head + "\"},"
+			+ "\"facing=west,part=head\":{\"model\":\"" + head + "\",\"y\":90}"
+			+ "}}";
+		return json.getBytes(StandardCharsets.UTF_8);
+	}
+
+	/**
 	 * Cube with distinct side/end textures, through {@code cube_column} (vertical) or
 	 * {@code cube_column_horizontal} (for logs lying on their side). Used for legacy packs'
 	 * log textures, which - like vanilla's - ship a separate bark ({@code side}) and end-grain

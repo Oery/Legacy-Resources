@@ -227,6 +227,10 @@ public final class LegacyPackResources implements PackResources {
 	/** The two JSON trees below, as {@link #listResources} is asked for them (no trailing slash). */
 	private static final String MODEL_ROOT = "models";
 	private static final String BLOCKSTATES_ROOT = "blockstates";
+	private static final List<String> BED_COLORS = List.of(
+		"white", "orange", "magenta", "light_blue", "yellow", "lime", "pink", "gray", "light_gray", "cyan",
+		"purple", "blue", "brown", "green", "red", "black"
+	);
 	private static final String JSON_SUFFIX = ".json";
 	private static final String PNG_SUFFIX = ".png";
 	private static final String PARENT_KEY = "parent";
@@ -617,6 +621,11 @@ public final class LegacyPackResources implements PackResources {
 					}
 				}
 			});
+			if (namespace.equals("minecraft") && directoryCovers(directory, BLOCKSTATES_ROOT) && hasCustomLegacyBedModels(namespace)) {
+				for (String color : BED_COLORS) {
+					announceComputedBlockstate(namespace, color + "_bed", output);
+				}
+			}
 			return;
 		}
 		if (isOrUnder(directory, "textures/entity/chest")) {
@@ -684,6 +693,14 @@ public final class LegacyPackResources implements PackResources {
 
 	private void announceComputedModel(String namespace, String stem, PackResources.ResourceOutput output) {
 		Identifier id = Identifier.fromNamespaceAndPath(namespace, MODEL_BLOCK_DIR + stem + ".json");
+		IoSupplier<InputStream> resource = getResource(PackType.CLIENT_RESOURCES, id);
+		if (resource != null) {
+			output.accept(id, resource);
+		}
+	}
+
+	private void announceComputedBlockstate(String namespace, String stem, PackResources.ResourceOutput output) {
+		Identifier id = Identifier.fromNamespaceAndPath(namespace, BLOCKSTATES_DIR + stem + JSON_SUFFIX);
 		IoSupplier<InputStream> resource = getResource(PackType.CLIENT_RESOURCES, id);
 		if (resource != null) {
 			output.accept(id, resource);
@@ -1589,7 +1606,7 @@ public final class LegacyPackResources implements PackResources {
 
 	private byte @Nullable [] computeBlockModel(Identifier location, String stem) {
 		if (packHas(location)) {
-			return tryRewriteModel(location);
+			return tryRewriteModel(location, bedColor(stem, location));
 		}
 		String namespace = location.getNamespace();
 		if (NO_GENERIC_FALLBACK_MODEL_STEMS.contains(stem)) {
@@ -1634,7 +1651,7 @@ public final class LegacyPackResources implements PackResources {
 
 	private byte @Nullable [] computeItemModel(Identifier location, String stem) {
 		if (packHas(location)) {
-			return tryRewriteModel(location);
+			return tryRewriteModel(location, null);
 		}
 		String namespace = location.getNamespace();
 		if (textureResolves(namespace, NEW_ITEM_TEXTURE_DIR, stem)) {
@@ -1644,6 +1661,30 @@ public final class LegacyPackResources implements PackResources {
 			return FallbackModelGenerator.generatedItemModel(namespace, "block/" + stem);
 		}
 		return null;
+	}
+
+	/** The dye colour for an aliased legacy bed model, or {@code null} for its original identifier. */
+	private static @Nullable String bedColor(String modernStem, Identifier legacyLocation) {
+		String legacyPath = legacyLocation.getPath();
+		String part = legacyPath.endsWith("/bed_head.json") ? "head" : legacyPath.endsWith("/bed_foot.json") ? "foot" : null;
+		if (part == null) {
+			return null;
+		}
+		String suffix = "_bed_" + part;
+		String color = modernStem.endsWith(suffix) ? modernStem.substring(0, modernStem.length() - suffix.length()) : null;
+		return color != null && BED_COLORS.contains(color) ? color : null;
+	}
+
+	private static @Nullable String bedColor(String modernStem) {
+		if (!modernStem.endsWith("_bed")) {
+			return null;
+		}
+		String color = modernStem.substring(0, modernStem.length() - "_bed".length());
+		return BED_COLORS.contains(color) ? color : null;
+	}
+
+	private boolean hasCustomLegacyBedModels(String namespace) {
+		return packBlockModelExists(namespace, "bed_head") && packBlockModelExists(namespace, "bed_foot");
 	}
 
 	/**
@@ -1675,6 +1716,10 @@ public final class LegacyPackResources implements PackResources {
 		}
 		if (packHas(location)) {
 			return tryConvertBlockstate(location, stem);
+		}
+		String bedColor = bedColor(stem);
+		if (bedColor != null && hasCustomLegacyBedModels(namespace)) {
+			return FallbackModelGenerator.legacyBedBlockstate(namespace, bedColor);
 		}
 		if (stem.equals("redstone_torch") || stem.equals("redstone_wall_torch")) {
 			String unlitStem = stem + "_off";
@@ -1749,12 +1794,12 @@ public final class LegacyPackResources implements PackResources {
 	 * Refusing to serve the file gets vanilla's own model back instead, which the pack's textures still
 	 * reach through the rest of this mod.
 	 */
-	private byte @Nullable [] tryRewriteModel(Identifier location) {
+	private byte @Nullable [] tryRewriteModel(Identifier location, @Nullable String bedColor) {
 		JsonElement parsed = readJson(location);
 		if (parsed == null || !parsed.isJsonObject()) {
 			return null;
 		}
-		JsonObject model = JsonRewriter.rewrite(parsed).getAsJsonObject();
+		JsonObject model = bedColor == null ? JsonRewriter.rewrite(parsed).getAsJsonObject() : JsonRewriter.rewriteBedModel(parsed, bedColor);
 		JsonElement parent = model.get(PARENT_KEY);
 		if (parent != null) {
 			if (!parent.isJsonPrimitive() || !parent.getAsJsonPrimitive().isString()) {

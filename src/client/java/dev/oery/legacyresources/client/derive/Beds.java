@@ -252,6 +252,11 @@ final class Beds implements Derivation {
 				outputs.add(face.output(color));
 			}
 		}
+		for (String color : RAMPS.keySet()) {
+			for (String source : legacyColoredSources()) {
+				outputs.add(legacyOutput(color, source));
+			}
+		}
 		return List.copyOf(outputs);
 	}
 
@@ -355,7 +360,8 @@ final class Beds implements Derivation {
 		}
 		// Red first, as the pack's own untouched pixels. If the cloth cannot be read at all this is the
 		// only bed that comes out, so it is put in before anything can go wrong.
-		base.forEach((face, image) -> derived.put(face.output(RED), image));
+		putColor(derived, RED, base);
+		putLegacyColor(derived, RED, sources, base, null, null, params);
 
 		Cloth cloth = measure(base, sides, tops, params);
 		if (cloth == null) {
@@ -368,17 +374,55 @@ final class Beds implements Derivation {
 		// not red is the one bed in the set that lies. So those get red built the same way as the rest,
 		// which still keeps the pack's shading, weave and contrast - only the hue is vanilla's.
 		if (Ops.agree(cloth.direction(), VANILLA_RED) < params.get("red_passthrough")) {
-			base.forEach((face, image) ->
-				derived.put(face.output(RED), recolor(image, cloth.mask(face), cloth, RAMPS.get(RED), params)));
+			putColor(derived, RED, recolored(base, cloth, RAMPS.get(RED), params));
+			putLegacyColor(derived, RED, sources, base, cloth, RAMPS.get(RED), params);
 		}
 		RAMPS.forEach((color, ramp) -> {
 			if (color.equals(RED)) {
 				return;
 			}
-			base.forEach((face, image) ->
-				derived.put(face.output(color), recolor(image, cloth.mask(face), cloth, ramp, params)));
+			putColor(derived, color, recolored(base, cloth, ramp, params));
+			putLegacyColor(derived, color, sources, base, cloth, ramp, params);
 		});
 		return derived;
+	}
+
+	private static Map<Face, BufferedImage> recolored(Map<Face, BufferedImage> base, Cloth cloth, int[] ramp, Params params) {
+		Map<Face, BufferedImage> recolored = new LinkedHashMap<>();
+		base.forEach((face, image) -> recolored.put(face, recolor(image, cloth.mask(face), cloth, ramp, params)));
+		return recolored;
+	}
+
+	/** Adds the modern template sprites for one dye. */
+	private static void putColor(Map<String, BufferedImage> derived, String color, Map<Face, BufferedImage> faces) {
+		faces.forEach((face, image) -> derived.put(face.output(color), image));
+	}
+
+	/**
+	 * Recolours the original legacy sheets in place for custom geometry. Unlike modern templates,
+	 * those models use their entire sheets, including the old leg strip, so they cannot be rebuilt
+	 * from a modern sprite after {@link #packLegs} has repacked that strip.
+	 */
+	private static void putLegacyColor(Map<String, BufferedImage> derived, String color, Map<String, BufferedImage> sources,
+		Map<Face, BufferedImage> base, @Nullable Cloth cloth, int @Nullable [] ramp, Params params) {
+		for (String source : legacyColoredSources()) {
+			Face face = base.keySet().stream().filter(candidate -> candidate.source().equals(source)).findFirst().orElseThrow();
+			BufferedImage original = sources.get(source);
+			if (original == null) {
+				continue;
+			}
+			BufferedImage legacy = cloth == null ? original
+				: recolor(original, legacyMask(original, face, cloth, params), cloth, ramp, params);
+			derived.put(legacyOutput(color, source), legacy);
+		}
+	}
+
+	private static List<String> legacyColoredSources() {
+		return COLORED.stream().map(Face::source).distinct().toList();
+	}
+
+	private static String legacyOutput(String color, String source) {
+		return "block/" + color + "_legacy_" + source.substring("block/".length());
 	}
 
 	/** @return {@code null} where the pack has no usable source for this face, declining it */
@@ -407,6 +451,47 @@ final class Beds implements Derivation {
 			}
 		}
 		return Ops.image(out, size, size);
+	}
+
+
+	/**
+	 * Maps a modern-face cloth mask back onto its source's legacy UV layout, then reclassifies the
+	 * old leg strip. Custom models can use that strip for blanket folds (PureBDcraft does), while
+	 * modern templates replace it with real leg geometry before their masks are measured.
+	 */
+	private static boolean[] legacyMask(BufferedImage source, Face face, Cloth cloth, Params params) {
+		int size = source.getWidth();
+		boolean[] legacy = unturnMask(cloth.mask(face), size, face.turn());
+		int[] pixels = Ops.pixels(source);
+		int start = LEG_TOP * Ops.scaleOf(source) * size;
+		for (int i = start; i < pixels.length; i++) {
+			if (Ops.alpha(pixels[i]) == 0) {
+				continue;
+			}
+			double[] chroma = Ops.chromaOf(pixels[i], params.get("neutral_floor"));
+			if (chroma == null || Ops.agree(chroma, cloth.direction()) < params.get("cloth_agreement")) {
+				continue;
+			}
+			if (cloth.timber() == null || Ops.agree(chroma, cloth.timber()) < Ops.agree(chroma, cloth.direction())) {
+				legacy[i] = true;
+			}
+		}
+		return legacy;
+	}
+
+	private static boolean[] unturnMask(boolean[] turned, int size, Turn turn) {
+		boolean[] legacy = new boolean[turned.length];
+		for (int y = 0; y < size; y++) {
+			for (int x = 0; x < size; x++) {
+				int turnedIndex = switch (turn) {
+					case KEEP -> y * size + x;
+					case MIRROR -> y * size + (size - 1 - x);
+					case ROTATE -> (size - 1 - x) * size + y;
+				};
+				legacy[y * size + x] = turned[turnedIndex];
+			}
+		}
+		return legacy;
 	}
 
 	/**
@@ -554,7 +639,7 @@ final class Beds implements Derivation {
 	 * and its sides stay in step instead of each being stretched to fill the dye's ramp alone - the same
 	 * reason {@link NetheriteRecolor} measures a whole armour set together.
 	 */
-	private record Cloth(Map<Face, boolean[]> masks, int min, int max, double[] direction) {
+	private record Cloth(Map<Face, boolean[]> masks, int min, int max, double[] direction, double @Nullable [] timber) {
 		boolean[] mask(Face face) {
 			return masks.get(face);
 		}
@@ -636,7 +721,7 @@ final class Beds implements Derivation {
 		if (max <= min) {
 			return null;
 		}
-		return new Cloth(Collections.unmodifiableMap(masks), min, max, sides != null ? sides : tops);
+		return new Cloth(Collections.unmodifiableMap(masks), min, max, sides != null ? sides : tops, timber);
 	}
 
 	/** The luminance at {@code fraction} of the way through {@code histogram}'s population. */

@@ -1,3 +1,19 @@
 {
-  "oak_trapdoor": "trapdoor"
+  "black_bed": "bed",
+  "blue_bed": "bed",
+  "brown_bed": "bed",
+  "cyan_bed": "bed",
+  "gray_bed": "bed",
+  "green_bed": "bed",
+  "light_blue_bed": "bed",
+  "light_gray_bed": "bed",
+  "lime_bed": "bed",
+  "magenta_bed": "bed",
+  "oak_trapdoor": "trapdoor",
+  "orange_bed": "bed",
+  "pink_bed": "bed",
+  "purple_bed": "bed",
+  "red_bed": "bed",
+  "white_bed": "bed",
+  "yellow_bed": "bed"
 }

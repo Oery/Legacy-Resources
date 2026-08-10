@@ -64,6 +64,23 @@ tasks.register('runLab', JavaExec) {
 	}
 }
 
+tasks.register('generateModelNameMaps', JavaExec) {
+	group = 'legacy-resources'
+	description = 'Derives safe legacy-to-modern blockstate and block-model aliases from vanilla assets'
+	classpath = sourceSets.lab.runtimeClasspath
+	mainClass = 'dev.oery.legacyresources.lab.ModelNameMapGenerator'
+	systemProperty 'lab.project', projectDir.absolutePath
+}
+
+tasks.register('verifyModelNameMaps', JavaExec) {
+	group = 'verification'
+	description = 'Checks that every safe vanilla-derived block-model alias is bundled'
+	classpath = sourceSets.lab.runtimeClasspath
+	mainClass = 'dev.oery.legacyresources.lab.ModelNameMapGenerator'
+	systemProperty 'lab.project', projectDir.absolutePath
+	args '--check'
+}
+
 processResources {
 	def version = project.version
 	inputs.property "version", version

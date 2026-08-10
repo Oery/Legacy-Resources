@@ -114,7 +114,9 @@ that fails silently - an unannounced sprite renders as vanilla's art with nothin
       stay loose: the pillow is already held off by `neutral_floor` (no pack in the corpus tints one past
       it) and the frame by the timber comparison, so tightening it buys nothing and starts slicing
       blankets that are not one hue — nebula's runs a gradient cyan to violet across a single face.
-      Needs an in-game look.
+      Needs an in-game look. The legacy custom-model path now works, but the bed derivation itself
+      should be revisited: its cloth mask still bleeds slightly and the derived side colour does not
+      yet match the top as closely as it should.
 - [x] Path Blocks: can be derived from grass blocks
       — `DirtPath`, both faces. Vanilla's own pair turned out to say exactly how the block is built.
       `dirt_path_side` is `dirt` with the grass block's fringe painted over it: its crust falls on
