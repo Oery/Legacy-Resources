@@ -795,11 +795,31 @@ public final class LegacyPackResources implements PackResources {
 	 * @param path full modern texture path, e.g. {@code textures/block/suspicious_gravel_0.png}
 	 */
 	private @Nullable IoSupplier<InputStream> resolveDerivedTexture(String path) {
-		if (!path.endsWith(".png")) {
-			return null;
+		if (path.endsWith(".png.mcmeta")) {
+			return resolveDerivedTextureMetadata(path);
 		}
+		if (!path.endsWith(".png")) return null;
 		byte[] bytes = derivedTexture(path.substring(TEXTURE_DIR.length(), path.length() - ".png".length()));
 		return bytes == null ? null : () -> new ByteArrayInputStream(bytes);
+	}
+
+	/** Serves source animation metadata alongside a derived animation strip. */
+	private @Nullable IoSupplier<InputStream> resolveDerivedTextureMetadata(String path) {
+		String output = path.substring(TEXTURE_DIR.length(), path.length() - ".png.mcmeta".length());
+		Derivation derivation = Derivations.byOutput(output);
+		if (derivation == null || derivedTexture(output) == null) return null;
+		String source = derivation.animationSource(output);
+		if (source == null) {
+			source = derivation.sources().stream().filter(this::sourceHasAnimationMetadata).findFirst().orElse(null);
+		}
+		if (source == null) return null;
+		Identifier sourceMetadata = Identifier.fromNamespaceAndPath("minecraft", TEXTURE_DIR + source + ".png.mcmeta");
+		return getResource(PackType.CLIENT_RESOURCES, sourceMetadata);
+	}
+
+	private boolean sourceHasAnimationMetadata(String texturePath) {
+		Identifier metadata = Identifier.fromNamespaceAndPath("minecraft", TEXTURE_DIR + texturePath + ".png.mcmeta");
+		return getResource(PackType.CLIENT_RESOURCES, metadata) != null;
 	}
 
 	/** @param texturePath a derivation-facing path, e.g. {@code block/suspicious_gravel_0} */
@@ -844,19 +864,100 @@ public final class LegacyPackResources implements PackResources {
 		if (sources.isEmpty()) {
 			return Map.of();
 		}
-		Map<String, byte[]> encoded = new LinkedHashMap<>();
 		try {
-			Map<String, BufferedImage> derived = derivation.derive(sources, Params.defaults(derivation.params()));
-			for (Map.Entry<String, BufferedImage> entry : derived.entrySet()) {
-				ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-				ImageIO.write(entry.getValue(), "png", bytes);
-				encoded.put(entry.getKey(), bytes.toByteArray());
-			}
+			Map<String, BufferedImage> derived = deriveFrames(derivation, sources);
+			return encodeDerived(derived);
 		} catch (IOException | RuntimeException e) {
 			// One misbehaving derivation must not take the pack down with it: log it and let every
 			// texture it would have produced fall back to vanilla's.
 			LegacyResources.LOGGER.warn("Derivation {} failed for pack {}", derivation.id(), location().id(), e);
 			return Map.of();
+		}
+	}
+
+	/**
+	 * Runs a derivation once per animation frame when any of its sources is an animated vertical
+	 * strip. Static inputs are deliberately reused for every frame. This keeps animation support at
+	 * the resource boundary: individual derivations can continue to reason solely about square
+	 * texture frames.
+	 */
+	private Map<String, BufferedImage> deriveFrames(Derivation derivation, Map<String, BufferedImage> sources) {
+		int frames = sharedAnimationFrameCount(sources);
+		if (frames <= 1) {
+			return derivation.derive(sources, Params.defaults(derivation.params()));
+		}
+		Map<String, List<BufferedImage>> outputFrames = new LinkedHashMap<>();
+		for (int frame = 0; frame < frames; frame++) {
+			Map<String, BufferedImage> frameSources = new LinkedHashMap<>();
+			for (Map.Entry<String, BufferedImage> source : sources.entrySet()) {
+				frameSources.put(source.getKey(), isAnimatedSource(source.getKey(), source.getValue()) ? animationFrame(source.getValue(), frame) : source.getValue());
+			}
+			Map<String, BufferedImage> derived = derivation.derive(frameSources, Params.defaults(derivation.params()));
+			for (Map.Entry<String, BufferedImage> output : derived.entrySet()) {
+				outputFrames.computeIfAbsent(output.getKey(), ignored -> new java.util.ArrayList<>()).add(output.getValue());
+			}
+		}
+		Map<String, BufferedImage> stacked = new LinkedHashMap<>();
+		for (Map.Entry<String, List<BufferedImage>> output : outputFrames.entrySet()) {
+			// A derivation that declines even one frame is safer falling back to vanilla than gaining a
+			// shortened, desynchronised animation.
+			if (output.getValue().size() == frames) {
+				stacked.put(output.getKey(), stackAnimationFrames(output.getValue()));
+			}
+		}
+		return stacked;
+	}
+
+	private int sharedAnimationFrameCount(Map<String, BufferedImage> sources) {
+		int frames = 1;
+		for (Map.Entry<String, BufferedImage> source : sources.entrySet()) {
+			if (!isAnimatedSource(source.getKey(), source.getValue())) continue;
+			int sourceFrames = source.getValue().getHeight() / source.getValue().getWidth();
+			if (frames != 1 && frames != sourceFrames) {
+				return 1;
+			}
+			frames = sourceFrames;
+		}
+		return frames;
+	}
+
+	private boolean isAnimatedSource(String texturePath, BufferedImage image) {
+		if (image.getWidth() <= 0 || image.getHeight() <= image.getWidth() || image.getHeight() % image.getWidth() != 0) {
+			return false;
+		}
+		Identifier metadata = Identifier.fromNamespaceAndPath("minecraft", TEXTURE_DIR + texturePath + ".png.mcmeta");
+		return getResource(PackType.CLIENT_RESOURCES, metadata) != null;
+	}
+
+	private static BufferedImage animationFrame(BufferedImage strip, int frame) {
+		int size = strip.getWidth();
+		return strip.getSubimage(0, frame * size, size, size);
+	}
+
+	private static BufferedImage stackAnimationFrames(List<BufferedImage> frames) {
+		BufferedImage first = frames.getFirst();
+		int width = first.getWidth();
+		int height = first.getHeight();
+		if (width != height) {
+			throw new IllegalArgumentException("Derivation frame must be square");
+		}
+		BufferedImage strip = new BufferedImage(width, height * frames.size(), BufferedImage.TYPE_INT_ARGB);
+		for (int frame = 0; frame < frames.size(); frame++) {
+			BufferedImage image = frames.get(frame);
+			if (image.getWidth() != width || image.getHeight() != height) {
+				throw new IllegalArgumentException("Derivation output changes size between animation frames");
+			}
+			strip.setRGB(0, frame * height, width, height, image.getRGB(0, 0, width, height, null, 0, width), 0, width);
+		}
+		return strip;
+	}
+
+	private static Map<String, byte[]> encodeDerived(Map<String, BufferedImage> derived) throws IOException {
+		Map<String, byte[]> encoded = new LinkedHashMap<>();
+		for (Map.Entry<String, BufferedImage> entry : derived.entrySet()) {
+			ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+			ImageIO.write(entry.getValue(), "png", bytes);
+			encoded.put(entry.getKey(), bytes.toByteArray());
 		}
 		return Map.copyOf(encoded);
 	}
@@ -908,6 +1009,11 @@ public final class LegacyPackResources implements PackResources {
 				byte[] bytes = derivedTexture(texturePath);
 				if (bytes != null) {
 					output.accept(id, () -> new ByteArrayInputStream(bytes));
+					Identifier metadata = id.withPath(id.getPath() + METADATA_SUFFIX);
+					IoSupplier<InputStream> metadataResource = getResource(PackType.CLIENT_RESOURCES, metadata);
+					if (metadataResource != null) {
+						output.accept(metadata, metadataResource);
+					}
 				}
 			}
 		}

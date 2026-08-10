@@ -3,6 +3,7 @@ package dev.oery.legacyresources.client.derive;
 import java.awt.image.BufferedImage;
 import java.util.List;
 import java.util.Map;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Synthesizes textures a legacy pack never shipped, out of ones it did.
@@ -46,6 +47,15 @@ public interface Derivation {
 	List<String> outputs();
 
 	List<Param> params();
+
+	/**
+	 * The source whose animation metadata an animated output follows, or {@code null} when the
+	 * output is static. Implementations which derive a vertical animation strip must name the source
+	 * here so the pack wrapper can announce the corresponding {@code .mcmeta} beside it.
+	 */
+	default @Nullable String animationSource(String output) {
+		return null;
+	}
 
 	/**
 	 * @param sources only those {@link #sources()} that resolved in this pack - an implementation must

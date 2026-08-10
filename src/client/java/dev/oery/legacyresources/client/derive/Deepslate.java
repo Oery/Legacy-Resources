@@ -79,40 +79,96 @@ final class Deepslate implements Derivation {
 	}
 
 	@Override
+	public String animationSource(String output) {
+		if (output.equals(DEEPSLATE) || output.equals(DEEPSLATE_TOP)) {
+			return STONE;
+		}
+		if (output.equals(COPPER_ORE) || output.equals("block/deepslate_copper_ore")) {
+			return "block/iron_ore";
+		}
+		return ORES.stream().filter(ore -> ore.output().equals(output)).map(Ore::source).findFirst().orElse(null);
+	}
+
+	@Override
 	public Map<String, BufferedImage> derive(Map<String, BufferedImage> sources, Params params) {
 		BufferedImage stone = sources.get(STONE);
-		if (stone == null || Ops.scaleOf(stone) == 0) {
+		int stoneFrames = frameCount(stone);
+		if (stoneFrames == 0) {
 			return Map.of();
 		}
 		Map<String, BufferedImage> derived = new LinkedHashMap<>();
 		// Vanilla uses a separate top sprite, but it is the same material. Legacy packs only supply
 		// one stone texture, so using this exact derived side keeps both faces pack-consistent.
-		BufferedImage deepslate = repaint(stone, null, palette(params), params.get("spread"), params);
+		BufferedImage deepslate = repaintFrames(stone, stoneFrames, null, palette(params), params.get("spread"), params);
 		derived.put(DEEPSLATE, deepslate);
 		derived.put(DEEPSLATE_TOP, deepslate);
 		for (Ore ore : ORES) {
 			BufferedImage source = sources.get(ore.source());
-			if (source == null || Ops.scaleOf(source) == 0) {
+			int oreFrames = frameCount(source);
+			if (oreFrames == 0 || stoneFrames != 1 && stoneFrames != oreFrames) {
 				continue;
 			}
-			boolean[] host = hostMask(
-				stone, source, params.getInt("host_difference"), params.getInt("shadow_difference"), params.getInt("shadow_chroma")
-			);
-			if (hostFraction(host) < params.get("min_host_fraction")) {
-				continue;
+			List<BufferedImage> oreOutput = new java.util.ArrayList<>();
+			List<BufferedImage> copperOutput = new java.util.ArrayList<>();
+			boolean usable = true;
+			for (int frame = 0; frame < oreFrames; frame++) {
+				BufferedImage oreFrame = frame(source, frame);
+				BufferedImage stoneFrame = frame(stone, stoneFrames == 1 ? 0 : frame);
+				boolean[] host = hostMask(
+					stoneFrame, oreFrame, params.getInt("host_difference"), params.getInt("shadow_difference"), params.getInt("shadow_chroma")
+				);
+				if (hostFraction(host) < params.get("min_host_fraction")) {
+					usable = false;
+					break;
+				}
+				if (ore.copper()) {
+					copperOutput.add(repaint(oreFrame, invert(host), copperPalette(params), params.get("copper_spread"), params));
+				}
+				BufferedImage derivedOre = repaint(oreFrame, host, palette(params), params.get("spread"), params);
+				if (ore.copper()) {
+					derivedOre = repaint(derivedOre, invert(host), copperPalette(params), params.get("copper_spread"), params);
+				}
+				oreOutput.add(derivedOre);
 			}
-			if (ore.copper()) {
-				// A regular copper ore is simply the legacy stone host with iron's pack-specific vein
-				// shape repainted. Do this before replacing the host for its deepslate sibling.
-				derived.put(COPPER_ORE, repaint(source, invert(host), copperPalette(params), params.get("copper_spread"), params));
+			if (usable) {
+				if (ore.copper()) derived.put(COPPER_ORE, stack(copperOutput));
+				derived.put(ore.output(), stack(oreOutput));
 			}
-			BufferedImage derivedOre = repaint(source, host, palette(params), params.get("spread"), params);
-			if (ore.copper()) {
-				derivedOre = repaint(derivedOre, invert(host), copperPalette(params), params.get("copper_spread"), params);
-			}
-			derived.put(ore.output(), derivedOre);
 		}
 		return derived;
+	}
+
+	private static int frameCount(BufferedImage image) {
+		if (image == null || image.getWidth() < Ops.BASE_SIZE || image.getWidth() % Ops.BASE_SIZE != 0 || image.getHeight() % image.getWidth() != 0) {
+			return 0;
+		}
+		return image.getHeight() / image.getWidth();
+	}
+
+	private static BufferedImage frame(BufferedImage strip, int frame) {
+		int size = strip.getWidth();
+		return strip.getSubimage(0, frame * size, size, size);
+	}
+
+	private static BufferedImage repaintFrames(BufferedImage strip, int frames, boolean[] selected, Palette palette, double spread, Params params) {
+		List<BufferedImage> output = new java.util.ArrayList<>();
+		for (int frame = 0; frame < frames; frame++) {
+			output.add(repaint(frame(strip, frame), selected, palette, spread, params));
+		}
+		return stack(output);
+	}
+
+	private static BufferedImage stack(List<BufferedImage> frames) {
+		if (frames.isEmpty()) {
+			throw new IllegalArgumentException("Cannot stack zero animation frames");
+		}
+		int size = frames.getFirst().getWidth();
+		BufferedImage strip = Ops.blank(size, size * frames.size());
+		for (int frame = 0; frame < frames.size(); frame++) {
+			int[] pixels = Ops.pixels(frames.get(frame));
+			strip.setRGB(0, frame * size, size, size, pixels, 0, size);
+		}
+		return strip;
 	}
 
 	private static Palette palette(Params params) {
