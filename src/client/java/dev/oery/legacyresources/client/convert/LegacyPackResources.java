@@ -2111,7 +2111,7 @@ public final class LegacyPackResources implements PackResources {
 		}
 		if (path.startsWith(MODEL_BLOCK_DIR)) {
 			String oldStem = path.substring(MODEL_BLOCK_DIR.length(), path.length() - JSON_SUFFIX.length());
-			return ResourceNameMaps.newBlockModelNames(oldStem).stream()
+			return ResourceNameMaps.allBlockModelNames(oldStem).stream()
 				.map(stem -> oldId.withPath(MODEL_BLOCK_DIR + stem + JSON_SUFFIX)).toList();
 		}
 		return List.of(oldId);

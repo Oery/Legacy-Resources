@@ -46,6 +46,21 @@ final class ResourceNameMaps {
 		return BLOCK_MODELS.newNames(oldStem);
 	}
 
+	/**
+	 * Every identifier a legacy model must keep: its modern aliases, plus its original identifier
+	 * when it has one. Legacy pack blockstates can still refer to the original while modern vanilla
+	 * blockstates select the aliases.
+	 */
+	static List<String> allBlockModelNames(String oldStem) {
+		List<String> mapped = newBlockModelNames(oldStem);
+		if (mapped.size() == 1 && mapped.getFirst().equals(oldStem)) {
+			return mapped;
+		}
+		List<String> all = new ArrayList<>(mapped);
+		all.add(oldStem);
+		return List.copyOf(all);
+	}
+
 	/** Rewrites an already-qualified {@code block/<stem>} model reference. */
 	static String newBlockModelPath(String path) {
 		if (!path.startsWith("block/")) {
