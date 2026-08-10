@@ -128,6 +128,10 @@ that fails silently - an unannounced sprite renders as vanilla's art with nothin
       work if the initial result does not read well in-game.
       Log tops infer their bark perimeter from the pack's own edge and centre colours, so rounded HD
       end grain (such as PureBDcraft's) keeps its real boundary while matching the side bark palette.
+- [x] Stripped logs (initial): `StrippedLogs` derives stripped oak, spruce, birch, jungle, acacia, dark
+      oak, cherry and pale oak logs. Legacy has no stripped art, so the pack's log grain is repainted to
+      modern exposed-wood bands; the top uses the source-aware bark mask. Mangrove, bamboo and nether
+      woods remain unserved because they have no compatible legacy source.
 - [x] Path Blocks: can be derived from grass blocks
       — `DirtPath`, both faces. Vanilla's own pair turned out to say exactly how the block is built.
       `dirt_path_side` is `dirt` with the grass block's fringe painted over it: its crust falls on
