@@ -61,6 +61,7 @@ final class JsonRewriter {
 			String stem = path.substring(OLD_ITEM_PREFIX.length());
 			return "item/" + TextureNameMaps.newItemName(stem);
 		}
-		return null;
+		String modelPath = ResourceNameMaps.newBlockModelPath(path);
+		return modelPath.equals(path) ? null : modelPath;
 	}
 }

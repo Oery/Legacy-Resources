@@ -347,7 +347,7 @@ final class BlockstateConverter {
 	private static @Nullable Identifier modelId(String namespace, String reference) {
 		int colon = reference.indexOf(':');
 		String modelNamespace = colon < 0 ? namespace : reference.substring(0, colon);
-		String path = LEGACY_MODEL_DIR + (colon < 0 ? reference : reference.substring(colon + 1));
+		String path = ResourceNameMaps.newBlockModelPath(LEGACY_MODEL_DIR + (colon < 0 ? reference : reference.substring(colon + 1)));
 		if (!Identifier.isValidNamespace(modelNamespace) || !Identifier.isValidPath(path)) {
 			return null;
 		}

@@ -479,7 +479,8 @@ public final class LegacyPackResources implements PackResources {
 		}
 		if (path.startsWith(MODEL_BLOCK_DIR) && path.endsWith(".json")) {
 			String stem = path.substring(MODEL_BLOCK_DIR.length(), path.length() - ".json".length());
-			return resolveJson(location, () -> computeBlockModel(location, stem));
+			Identifier legacyLocation = location.withPath(MODEL_BLOCK_DIR + ResourceNameMaps.oldBlockModelName(stem) + JSON_SUFFIX);
+			return resolveJson(location, () -> computeBlockModel(legacyLocation, stem));
 		}
 		if (path.startsWith(MODEL_ITEM_DIR) && path.endsWith(".json")) {
 			String stem = path.substring(MODEL_ITEM_DIR.length(), path.length() - ".json".length());
@@ -487,7 +488,8 @@ public final class LegacyPackResources implements PackResources {
 		}
 		if (path.startsWith(BLOCKSTATES_DIR) && path.endsWith(".json")) {
 			String stem = path.substring(BLOCKSTATES_DIR.length(), path.length() - ".json".length());
-			return resolveJson(location, () -> computeBlockstate(location, stem));
+			Identifier legacyLocation = location.withPath(BLOCKSTATES_DIR + ResourceNameMaps.oldBlockstateName(stem) + JSON_SUFFIX);
+			return resolveJson(location, () -> computeBlockstate(legacyLocation, stem));
 		}
 		return delegate.getResource(type, location);
 	}
@@ -608,9 +610,11 @@ public final class LegacyPackResources implements PackResources {
 			// jsonTreeQueried has to test the containment relationship in both directions. The narrower
 			// forms are handled too, since nothing guarantees a caller asks the way vanilla does.
 			delegate.listResources(type, namespace, directory, (id, supplier) -> {
-				IoSupplier<InputStream> converted = getResource(PackType.CLIENT_RESOURCES, id);
-				if (converted != null) {
-					output.accept(id, converted);
+				for (Identifier modernId : modernJsonIds(id)) {
+					IoSupplier<InputStream> converted = getResource(PackType.CLIENT_RESOURCES, modernId);
+					if (converted != null) {
+						output.accept(modernId, converted);
+					}
 				}
 			});
 			return;
@@ -2092,6 +2096,25 @@ public final class LegacyPackResources implements PackResources {
 			return translate(path, NEW_ITEM_TEXTURE_DIR, OLD_ITEM_TEXTURE_DIR, UnaryOperator.identity());
 		}
 		return null;
+	}
+
+	/** Every modern identifier under which this legacy JSON file must be listed. */
+	private static List<Identifier> modernJsonIds(Identifier oldId) {
+		String path = oldId.getPath();
+		if (!path.endsWith(JSON_SUFFIX)) {
+			return List.of(oldId);
+		}
+		if (path.startsWith(BLOCKSTATES_DIR)) {
+			String oldStem = path.substring(BLOCKSTATES_DIR.length(), path.length() - JSON_SUFFIX.length());
+			return ResourceNameMaps.newBlockstateNames(oldStem).stream()
+				.map(stem -> oldId.withPath(BLOCKSTATES_DIR + stem + JSON_SUFFIX)).toList();
+		}
+		if (path.startsWith(MODEL_BLOCK_DIR)) {
+			String oldStem = path.substring(MODEL_BLOCK_DIR.length(), path.length() - JSON_SUFFIX.length());
+			return ResourceNameMaps.newBlockModelNames(oldStem).stream()
+				.map(stem -> oldId.withPath(MODEL_BLOCK_DIR + stem + JSON_SUFFIX)).toList();
+		}
+		return List.of(oldId);
 	}
 
 	/**
