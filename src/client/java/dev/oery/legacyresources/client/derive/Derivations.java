@@ -29,6 +29,7 @@ public final class Derivations {
 		new CherryWood(),
 		new CherryLeaves(),
 		new PaleOak(),
+		new Mangrove(),
 		new StrippedLogs(),
 		new WhiteDye(),
 		new BlackDye(),

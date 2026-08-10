@@ -132,6 +132,9 @@ that fails silently - an unannounced sprite renders as vanilla's art with nothin
       oak, cherry and pale oak logs. Legacy has no stripped art, so the pack's log grain is repainted to
       modern exposed-wood bands; the top uses the source-aware bark mask. Mangrove, bamboo and nether
       woods remain unserved because they have no compatible legacy source.
+- [x] Mangrove (initial): `Mangrove` derives its log, end, planks and leaves from jungle; `StrippedLogs`
+      also now derives stripped mangrove logs. Roots, propagules and the rest of the mangrove family need
+      separate source and geometry decisions.
 - [x] Path Blocks: can be derived from grass blocks
       — `DirtPath`, both faces. Vanilla's own pair turned out to say exactly how the block is built.
       `dirt_path_side` is `dirt` with the grass block's fringe painted over it: its crust falls on

@@ -32,6 +32,7 @@ final class StrippedLogs implements Derivation {
 		new Wood("jungle", new Band(.094, .508, 137.9, 8.0), new Band(.082, .509, 129.3, 10.3)),
 		new Wood("acacia", new Band(.048, .657, 107.9, 4.8), new Band(.057, .688, 104.2, 7.9)),
 		new Wood("dark_oak", new Band(.095, .503, 58.8, 4.7), new Band(.084, .645, 47.3, 6.0)),
+		new Wood("mangrove", new Band(.015, .599, 67.8, 5.0), new Band(0, .618, 57.6, 9.5)),
 		new Wood("cherry", new Band(.991, .329, 160.3, 6.9), new Band(.018, .291, 176.2, 21.5)),
 		new Wood("pale_oak", new Band(.023, .036, 239.9, 9.2), new Band(.019, .042, 228.7, 17.6))
 	);
