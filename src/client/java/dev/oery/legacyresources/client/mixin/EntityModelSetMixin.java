@@ -1,14 +1,15 @@
 package dev.oery.legacyresources.client.mixin;
 
 import dev.oery.legacyresources.client.convert.LegacyCowModel;
-import dev.oery.legacyresources.client.convert.LegacyHorseModel;
+import dev.oery.legacyresources.client.convert.LegacyEndermanModel;
 import dev.oery.legacyresources.client.convert.LegacyPackResources;
-import java.util.Map;
+import dev.oery.legacyresources.client.convert.LegacyWolfModel;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.geom.EntityModelSet;
 import net.minecraft.client.model.geom.ModelLayerLocation;
 import net.minecraft.client.model.geom.ModelLayers;
 import net.minecraft.client.model.geom.ModelPart;
+import net.minecraft.client.model.animal.cow.CowModel;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.resources.Resource;
 import org.spongepowered.asm.mixin.Mixin;
@@ -17,26 +18,21 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
- * Swaps in hand-built classic geometry for mob models the 1.13+/variant-update rewrites broke
- * for legacy textures - see {@link LegacyCowModel} and {@link LegacyHorseModel} for the specifics
- * of what changed for each. Models are rebaked on every resource reload, so this stays in sync
- * with pack changes/F3+T.
+ * Swaps the small cow geometry delta that can still be driven by the modern quadruped animation.
+ * More involved families (notably horses) are selected through reload-aware renderer providers,
+ * because their classic animation and render layers are inseparable from their geometry.
  */
 @Mixin(EntityModelSet.class)
 public class EntityModelSetMixin {
-	private static final Identifier LEGACY_COW_TEXTURE = Identifier.withDefaultNamespace("textures/entity/cow/cow.png");
-
-	/**
-	 * Unlike the cow, horse texture filenames never changed, so there's no "only a legacy pack
-	 * would have this" filename to check. Instead, ask the resource manager which pack is
-	 * actually supplying each type's representative texture right now, and check whether that's
-	 * one of ours - {@link LegacyPackResources} only ever wraps a legacy pack.
-	 */
-	private static final Map<ModelLayerLocation, Identifier> HORSE_FAMILY_TEXTURES = Map.of(
-		ModelLayers.HORSE, Identifier.withDefaultNamespace("textures/entity/horse/horse_white.png"),
-		ModelLayers.SKELETON_HORSE, Identifier.withDefaultNamespace("textures/entity/horse/horse_skeleton.png"),
-		ModelLayers.ZOMBIE_HORSE, Identifier.withDefaultNamespace("textures/entity/horse/horse_zombie.png")
-	);
+	private static final Identifier CLASSIC_COW_TEXTURE = Identifier.withDefaultNamespace("textures/entity/cow/cow_temperate.png");
+	private static final Identifier CLASSIC_MOOSHROOM_TEXTURE = Identifier.withDefaultNamespace("textures/entity/cow/mooshroom_red.png");
+	private static final Identifier CLASSIC_ENDERMAN_TEXTURE = Identifier.withDefaultNamespace("textures/entity/enderman/enderman.png");
+	private static final Identifier[] CLASSIC_WOLF_TEXTURES = {
+		Identifier.withDefaultNamespace("textures/entity/wolf/wolf.png"),
+		Identifier.withDefaultNamespace("textures/entity/wolf/wolf_tame.png"),
+		Identifier.withDefaultNamespace("textures/entity/wolf/wolf_angry.png"),
+		Identifier.withDefaultNamespace("textures/entity/wolf/wolf_collar.png")
+	};
 
 	@Inject(method = "bakeLayer", at = @At("HEAD"), cancellable = true)
 	private void legacyresources$useLegacyMobModels(ModelLayerLocation id, CallbackInfoReturnable<ModelPart> cir) {
@@ -44,20 +40,32 @@ public class EntityModelSetMixin {
 		if (client == null) {
 			return;
 		}
-		if (id.equals(ModelLayers.COW) && client.getResourceManager().getResource(LEGACY_COW_TEXTURE).isPresent()) {
+		if (id.equals(ModelLayers.COW) && legacyresources$isLegacySourced(client, CLASSIC_COW_TEXTURE)) {
 			cir.setReturnValue(LegacyCowModel.createBodyLayer().bakeRoot());
 			return;
 		}
-		Identifier horseTexture = HORSE_FAMILY_TEXTURES.get(id);
-		if (horseTexture != null && legacyresources$isLegacySourced(client, horseTexture)) {
-			cir.setReturnValue(LegacyHorseModel.createBodyLayer().bakeRoot());
+		if (id.equals(ModelLayers.COW_BABY) && legacyresources$isLegacySourced(client, CLASSIC_COW_TEXTURE)) {
+			cir.setReturnValue(LegacyCowModel.createBodyLayer().apply(CowModel.BABY_TRANSFORMER).bakeRoot());
+			return;
 		}
+		if (id.equals(ModelLayers.MOOSHROOM) && legacyresources$isLegacySourced(client, CLASSIC_MOOSHROOM_TEXTURE)) {
+			cir.setReturnValue(LegacyCowModel.createBodyLayer().bakeRoot());
+			return;
+		}
+		if (id.equals(ModelLayers.MOOSHROOM_BABY) && legacyresources$isLegacySourced(client, CLASSIC_MOOSHROOM_TEXTURE)) {
+			cir.setReturnValue(LegacyCowModel.createBodyLayer().apply(CowModel.BABY_TRANSFORMER).bakeRoot());
+			return;
+		}
+		if (id.equals(ModelLayers.ENDERMAN) && legacyresources$isLegacySourced(client, CLASSIC_ENDERMAN_TEXTURE)) cir.setReturnValue(LegacyEndermanModel.createBodyLayer().bakeRoot());
+		if (id.equals(ModelLayers.WOLF) && legacyresources$hasLegacySource(client, CLASSIC_WOLF_TEXTURES)) cir.setReturnValue(LegacyWolfModel.createBodyLayer().bakeRoot());
 	}
 
 	private static boolean legacyresources$isLegacySourced(Minecraft client, Identifier texture) {
-		return client.getResourceManager().getResource(texture)
-			.map(Resource::source)
-			.filter(source -> source instanceof LegacyPackResources)
-			.isPresent();
+		return client.getResourceManager().getResource(texture).map(Resource::source).filter(LegacyPackResources.class::isInstance).isPresent();
+	}
+
+	private static boolean legacyresources$hasLegacySource(Minecraft client, Identifier[] textures) {
+		for (Identifier texture : textures) if (legacyresources$isLegacySourced(client, texture)) return true;
+		return false;
 	}
 }

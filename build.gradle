@@ -81,6 +81,17 @@ tasks.register('verifyModelNameMaps', JavaExec) {
 	args '--check'
 }
 
+tasks.register('verifyEntityCompatibility', JavaExec) {
+	group = 'verification'
+	description = 'Checks entity texture aliases through the real converted-pack wrapper over the full corpus'
+	classpath = sourceSets.lab.runtimeClasspath
+	mainClass = 'dev.oery.legacyresources.lab.EntityCompatibilityVerifier'
+	systemProperty 'lab.project', projectDir.absolutePath
+	if (project.hasProperty('lab.packs')) {
+		systemProperty 'lab.packs', project.property('lab.packs')
+	}
+}
+
 processResources {
 	def version = project.version
 	inputs.property "version", version

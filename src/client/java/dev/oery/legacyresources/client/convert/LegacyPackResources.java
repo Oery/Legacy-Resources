@@ -463,6 +463,13 @@ public final class LegacyPackResources implements PackResources {
 			IoSupplier<InputStream> texture = resolveTexture(location, path);
 			return texture != null ? texture : resolveDerivedTexture(path);
 		}
+		// Entity renderers load textures directly.  Check their compatibility aliases before the
+		// equipment branch: pig saddles live beneath textures/entity/equipment too, but are not
+		// humanoid armour and therefore have no generic equipment translation.
+		String vanillaCompatibleEntityPath = EntityTextureMappings.vanillaCompatibleLegacyPath(path);
+		if (vanillaCompatibleEntityPath != null) {
+			return delegate.getResource(PackType.CLIENT_RESOURCES, location.withPath(vanillaCompatibleEntityPath));
+		}
 		if (path.startsWith(NEW_EQUIPMENT_TEXTURE_DIR)) {
 			IoSupplier<InputStream> texture = resolveEquipmentTexture(location, path);
 			return texture != null ? texture : resolveDerivedTexture(path);

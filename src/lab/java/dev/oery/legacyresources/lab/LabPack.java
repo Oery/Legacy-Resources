@@ -61,6 +61,11 @@ final class LabPack {
 		return textureCache.computeIfAbsent(path, this::load);
 	}
 
+	boolean resolves(String path) {
+		Identifier id = Identifier.fromNamespaceAndPath("minecraft", path);
+		return resources.getResource(PackType.CLIENT_RESOURCES, id) != null;
+	}
+
 	private Optional<BufferedImage> load(String path) {
 		Identifier id = Identifier.fromNamespaceAndPath("minecraft", TEXTURE_PREFIX + path + ".png");
 		IoSupplier<InputStream> supplier = resources.getResource(PackType.CLIENT_RESOURCES, id);
