@@ -31,6 +31,7 @@ public final class Derivations {
 		new SoulTorch(),
 		new CopperTorch(),
 		new NetherWood(),
+		new Nylium(),
 		new CherryWood(),
 		new CherryLeaves(),
 		new PaleOak(),
