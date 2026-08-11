@@ -96,6 +96,17 @@ processResources {
 	def version = project.version
 	inputs.property "version", version
 
+tasks.register('verifyChestCompatibility', JavaExec) {
+	group = 'verification'
+	description = 'Checks corrected single and double chest sheets through converted PureBDcraft'
+	classpath = sourceSets.lab.runtimeClasspath
+	mainClass = 'dev.oery.legacyresources.lab.ChestCompatibilityVerifier'
+	systemProperty 'lab.project', projectDir.absolutePath
+	if (project.hasProperty('lab.packs')) {
+		systemProperty 'lab.packs', project.property('lab.packs')
+	}
+}
+
 	filesMatching("fabric.mod.json") {
 		expand "version": version
 	}
