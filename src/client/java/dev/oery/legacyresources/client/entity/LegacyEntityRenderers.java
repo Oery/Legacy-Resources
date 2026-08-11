@@ -35,6 +35,7 @@ public final class LegacyEntityRenderers {
 		EntityRendererRegistry.register(EntityTypes.SHEEP, LegacyEntityRenderers::sheep);
 		EntityRendererRegistry.register(EntityTypes.PIG, LegacyEntityRenderers::pig);
 		EntityRendererRegistry.register(EntityTypes.CHICKEN, LegacyEntityRenderers::chicken);
+		EntityRendererRegistry.register(EntityTypes.RABBIT, HybridRabbitRenderer::new);
 	}
 
 	private static net.minecraft.client.renderer.entity.EntityRenderer<net.minecraft.world.entity.animal.equine.Horse, ?> horse(EntityRendererProvider.Context context) {
