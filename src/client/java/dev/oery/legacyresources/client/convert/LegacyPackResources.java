@@ -233,11 +233,13 @@ public final class LegacyPackResources implements PackResources {
 	private static final int FISHING_HOOK_ATLAS_ROW = 2;
 	private static final String MODEL_BLOCK_DIR = "models/block/";
 	private static final String MODEL_ITEM_DIR = "models/item/";
+	private static final String ITEM_DEFINITION_DIR = "items/";
 	private static final String BLOCKSTATES_DIR = "blockstates/";
 	private static final String MODEL_DIR = "models/";
 	/** The two JSON trees below, as {@link #listResources} is asked for them (no trailing slash). */
 	private static final String MODEL_ROOT = "models";
 	private static final String BLOCKSTATES_ROOT = "blockstates";
+	private static final String ITEM_DEFINITION_ROOT = "items";
 	private static final List<String> BED_COLORS = List.of(
 		"white", "orange", "magenta", "light_blue", "yellow", "lime", "pink", "gray", "light_gray", "cyan",
 		"purple", "blue", "brown", "green", "red", "black"
@@ -506,7 +508,12 @@ public final class LegacyPackResources implements PackResources {
 		}
 		if (path.startsWith(MODEL_ITEM_DIR) && path.endsWith(".json")) {
 			String stem = path.substring(MODEL_ITEM_DIR.length(), path.length() - ".json".length());
-			return resolveJson(location, () -> computeItemModel(location, stem));
+			Identifier legacyLocation = location.withPath(MODEL_ITEM_DIR + ResourceNameMaps.oldItemModelName(stem) + JSON_SUFFIX);
+			return resolveJson(location, () -> computeItemModel(legacyLocation, stem));
+		}
+		if (path.startsWith(ITEM_DEFINITION_DIR) && path.endsWith(JSON_SUFFIX)) {
+			String stem = path.substring(ITEM_DEFINITION_DIR.length(), path.length() - JSON_SUFFIX.length());
+			return resolveJson(location, () -> computeItemDefinition(location, stem));
 		}
 		if (path.startsWith(BLOCKSTATES_DIR) && path.endsWith(".json")) {
 			String stem = path.substring(BLOCKSTATES_DIR.length(), path.length() - ".json".length());
@@ -663,6 +670,32 @@ public final class LegacyPackResources implements PackResources {
 					announceComputedBlockstate(namespace, color + "_bed", output);
 				}
 			}
+			return;
+		}
+		if (jsonTreeQueried(directory, ITEM_DEFINITION_ROOT)) {
+			// Legacy packs have no items/ tree.  Enumerate their item wrappers instead and invent the
+			// current definition only where that wrapper converted successfully.
+			delegate.listResources(type, namespace, MODEL_ITEM_DIR.substring(0, MODEL_ITEM_DIR.length() - 1), (oldId, supplier) -> {
+				if (!oldId.getPath().endsWith(JSON_SUFFIX)) return;
+				String oldStem = oldId.getPath().substring(MODEL_ITEM_DIR.length(), oldId.getPath().length() - JSON_SUFFIX.length());
+				for (String stem : ResourceNameMaps.allItemModelNames(oldStem)) {
+					Identifier definition = oldId.withPath(ITEM_DEFINITION_DIR + stem + JSON_SUFFIX);
+					IoSupplier<InputStream> converted = getResource(PackType.CLIENT_RESOURCES, definition);
+					if (converted != null) output.accept(definition, converted);
+				}
+			});
+			// A model-heavy pack commonly omits models/item entirely and relied on vanilla 1.8's
+			// wrappers. Current vanilla no longer has those wrappers, so synthesize definitions from
+			// each same-named block model where the current definition selects that block directly.
+			delegate.listResources(type, namespace, MODEL_BLOCK_DIR.substring(0, MODEL_BLOCK_DIR.length() - 1), (oldId, supplier) -> {
+				if (!oldId.getPath().endsWith(JSON_SUFFIX)) return;
+				String oldStem = oldId.getPath().substring(MODEL_BLOCK_DIR.length(), oldId.getPath().length() - JSON_SUFFIX.length());
+				for (String stem : ResourceNameMaps.allBlockModelNames(oldStem)) {
+					Identifier definition = oldId.withPath(ITEM_DEFINITION_DIR + stem + JSON_SUFFIX);
+					IoSupplier<InputStream> converted = getResource(PackType.CLIENT_RESOURCES, definition);
+					if (converted != null) output.accept(definition, converted);
+				}
+			});
 			return;
 		}
 		if (isOrUnder(directory, "textures/entity/chest")) {
@@ -1777,7 +1810,7 @@ public final class LegacyPackResources implements PackResources {
 
 	private byte @Nullable [] computeBlockModel(Identifier location, String stem) {
 		if (packHas(location)) {
-			return tryRewriteModel(location, bedColor(stem, location));
+			return tryRewriteModel(location, bedColor(stem, location), stem);
 		}
 		String namespace = location.getNamespace();
 		if (NO_GENERIC_FALLBACK_MODEL_STEMS.contains(stem)) {
@@ -1907,14 +1940,144 @@ public final class LegacyPackResources implements PackResources {
 			}
 		}
 		if (packHas(location)) {
-			return tryRewriteModel(location, null);
+			return tryRewriteItemModel(location, stem);
 		}
 		String namespace = location.getNamespace();
+		String blockParent = directBlockItemModel(namespace, stem);
+		if (blockParent != null) {
+			Identifier parentId = Identifier.tryParse(blockParent);
+			if (parentId != null) {
+				String parentStem = parentId.getPath().substring("block/".length());
+				Identifier legacyBlock = location.withPath(MODEL_BLOCK_DIR + ResourceNameMaps.oldBlockModelName(parentStem) + JSON_SUFFIX);
+				if (packHas(legacyBlock)) {
+					return GSON.toJson(JsonRewriter.blockItemWrapper(blockParent)).getBytes(StandardCharsets.UTF_8);
+				}
+			}
+		}
 		if (textureResolves(namespace, NEW_ITEM_TEXTURE_DIR, stem)) {
 			return FallbackModelGenerator.generatedItemModel(namespace, "item/" + stem);
 		}
 		if (textureResolves(namespace, NEW_BLOCK_TEXTURE_DIR, stem)) {
 			return FallbackModelGenerator.generatedItemModel(namespace, "block/" + stem);
+		}
+		return null;
+	}
+
+	/** Retains vanilla's data-driven selection/tints and substitutes only the legacy block wrapper. */
+	private byte @Nullable [] computeItemDefinition(Identifier location, String stem) {
+		Identifier legacyModel = location.withPath(MODEL_ITEM_DIR + ResourceNameMaps.oldItemModelName(stem) + JSON_SUFFIX);
+		byte[] vanilla = ModernVanillaAssets.read(location);
+		if (vanilla == null) return null;
+		try {
+			JsonElement parsed = JsonParser.parseString(new String(vanilla, StandardCharsets.UTF_8));
+			boolean hasLegacyWrapper = packHas(legacyModel) && tryRewriteItemModel(legacyModel, stem) != null;
+			String directBlock = directBlockModel(parsed);
+			if (!hasLegacyWrapper && directBlock == null) return null;
+			if (!hasLegacyWrapper) {
+				Identifier parentId = Identifier.tryParse(directBlock);
+				if (parentId == null || !parentId.getPath().startsWith("block/")) return null;
+				String parentStem = parentId.getPath().substring("block/".length());
+				Identifier legacyBlock = location.withPath(MODEL_BLOCK_DIR + ResourceNameMaps.oldBlockModelName(parentStem) + JSON_SUFFIX);
+				if (!packHas(legacyBlock)) return null;
+			}
+			JsonElement routed = JsonRewriter.routeBlockItemDefinition(parsed, location.getNamespace() + ":item/" + stem);
+			return GSON.toJson(routed).getBytes(StandardCharsets.UTF_8);
+		} catch (JsonParseException e) {
+			LegacyResources.LOGGER.warn("Failed to read vanilla item definition {}", location, e);
+			return null;
+		}
+	}
+
+	private @Nullable String directBlockItemModel(String namespace, String stem) {
+		Identifier definition = Identifier.fromNamespaceAndPath(namespace, ITEM_DEFINITION_DIR + stem + JSON_SUFFIX);
+		byte[] vanilla = ModernVanillaAssets.read(definition);
+		if (vanilla == null) return null;
+		try {
+			return directBlockModel(JsonParser.parseString(new String(vanilla, StandardCharsets.UTF_8)));
+		} catch (JsonParseException e) {
+			return null;
+		}
+	}
+
+	private static @Nullable String directBlockModel(JsonElement definition) {
+		if (!definition.isJsonObject()) return null;
+		JsonElement selected = definition.getAsJsonObject().get("model");
+		if (selected == null || !selected.isJsonObject()) return null;
+		JsonObject model = selected.getAsJsonObject();
+		JsonElement type = model.get("type");
+		JsonElement target = model.get("model");
+		if (type == null || !type.isJsonPrimitive() || !type.getAsString().equals("minecraft:model")
+			|| target == null || !target.isJsonPrimitive()) return null;
+		String value = target.getAsString();
+		Identifier id = Identifier.tryParse(value);
+		return id != null && id.getPath().startsWith("block/") ? value : null;
+	}
+
+	private byte @Nullable [] tryRewriteItemModel(Identifier location, String modernStem) {
+		JsonElement parsed = readJson(location);
+		if (parsed == null || !parsed.isJsonObject()) return null;
+		LegacyItemTransformConverter.Result presentation = LegacyItemTransformConverter.convert(location, modelLocation -> {
+			JsonElement candidate = readJson(modelLocation);
+			return candidate != null && candidate.isJsonObject() ? candidate.getAsJsonObject() : null;
+		});
+		if (!presentation.succeeded()) {
+			LegacyResources.LOGGER.debug(
+				"Deferring to vanilla for item model {} in legacy pack {}: {}",
+				location, location().id(), presentation.failure()
+			);
+			return null;
+		}
+		JsonObject model = JsonRewriter.rewrite(parsed).getAsJsonObject();
+		if (presentation.alreadyModern()) {
+			return validateRewrittenModel(location, model);
+		}
+		JsonElement parent = model.get(PARENT_KEY);
+		String parentName = parent != null && parent.isJsonPrimitive() ? parent.getAsString() : "";
+		if (parentName.equals("builtin/generated") || parentName.equals("builtin/compass")
+			|| parentName.equals("builtin/clock")) {
+			model.addProperty(PARENT_KEY, "minecraft:item/generated");
+		}
+		model.remove("display");
+		JsonObject display = presentation.display();
+		JsonElement shelf = modernItemDisplayContext(location.getNamespace(), modernStem, "on_shelf");
+		if (shelf != null) display.add("on_shelf", shelf);
+		model.add("display", display);
+		return validateRewrittenModel(location, model);
+	}
+
+	/**
+	 * Contexts added after 1.8 have no legacy renderer path to preserve. Inherit those from the
+	 * corresponding current vanilla item instead of inventing a legacy transform or allowing custom
+	 * geometry to accidentally erase current behaviour. Child definitions win, just as in the game's
+	 * own model-parent resolver.
+	 */
+	private static @Nullable JsonElement modernItemDisplayContext(String namespace, String stem, String context) {
+		Identifier current = Identifier.fromNamespaceAndPath(namespace, MODEL_ITEM_DIR + stem + JSON_SUFFIX);
+		Set<Identifier> visited = new HashSet<>();
+		for (int depth = 0; depth < 128 && visited.add(current); depth++) {
+			byte[] bytes = ModernVanillaAssets.read(current);
+			if (bytes == null) return null;
+			JsonObject model;
+			try {
+				JsonElement parsed = JsonParser.parseString(new String(bytes, StandardCharsets.UTF_8));
+				if (!parsed.isJsonObject()) return null;
+				model = parsed.getAsJsonObject();
+			} catch (JsonParseException e) {
+				return null;
+			}
+			JsonElement display = model.get("display");
+			if (display != null) {
+				if (!display.isJsonObject()) return null;
+				JsonElement value = display.getAsJsonObject().get(context);
+				if (value != null) return value.isJsonObject() ? value.deepCopy() : null;
+			}
+			JsonElement parent = model.get(PARENT_KEY);
+			if (parent == null || !parent.isJsonPrimitive() || !parent.getAsJsonPrimitive().isString()) return null;
+			String parentName = parent.getAsString();
+			if (parentName.startsWith("builtin/")) return null;
+			Identifier parentId = Identifier.tryParse(parentName);
+			if (parentId == null) return null;
+			current = Identifier.fromNamespaceAndPath(parentId.getNamespace(), MODEL_DIR + parentId.getPath() + JSON_SUFFIX);
 		}
 		return null;
 	}
@@ -2102,11 +2265,55 @@ public final class LegacyPackResources implements PackResources {
 	 * reach through the rest of this mod.
 	 */
 	private byte @Nullable [] tryRewriteModel(Identifier location, @Nullable String bedColor) {
+		return tryRewriteModel(location, bedColor, null);
+	}
+
+	private byte @Nullable [] tryRewriteModel(Identifier location, @Nullable String bedColor,
+		@Nullable String outputStem) {
 		JsonElement parsed = readJson(location);
 		if (parsed == null || !parsed.isJsonObject()) {
 			return null;
 		}
 		JsonObject model = bedColor == null ? JsonRewriter.rewrite(parsed).getAsJsonObject() : JsonRewriter.rewriteBedModel(parsed, bedColor);
+		if (outputStem != null) {
+			model = inlineRenamedSelfParent(location, outputStem, model);
+			if (model == null) return null;
+		}
+		return validateRewrittenModel(location, model);
+	}
+
+	/**
+	 * A legacy binding wrapper and its geometry parent can collapse onto the same modern name during
+	 * flattening ({@code piston_normal -> piston}, {@code farmland_dry -> farmland}, and others).
+	 * Leaving that rewritten parent in place makes a self-cycle. Resolve that one inheritance step
+	 * exactly as 1.8 did: keep the parent's geometry/properties and overlay the child's bindings.
+	 */
+	private @Nullable JsonObject inlineRenamedSelfParent(Identifier legacyLocation, String outputStem, JsonObject child) {
+		JsonElement parent = child.get(PARENT_KEY);
+		if (parent == null || !parent.isJsonPrimitive() || !parent.getAsJsonPrimitive().isString()) return child;
+		Identifier parentId = Identifier.tryParse(parent.getAsString());
+		Identifier outputId = Identifier.fromNamespaceAndPath(legacyLocation.getNamespace(), "block/" + outputStem);
+		if (!outputId.equals(parentId)) return child;
+		Identifier parentLocation = Identifier.fromNamespaceAndPath(parentId.getNamespace(), MODEL_DIR + parentId.getPath() + JSON_SUFFIX);
+		if (parentLocation.equals(legacyLocation)) return null;
+		JsonElement rawParent = readJson(parentLocation);
+		if (rawParent == null || !rawParent.isJsonObject()) return null;
+		JsonObject result = JsonRewriter.rewrite(rawParent).getAsJsonObject();
+		for (Map.Entry<String, JsonElement> entry : child.entrySet()) {
+			if (entry.getKey().equals(PARENT_KEY)) continue;
+			if (entry.getKey().equals(TEXTURES_KEY) && entry.getValue().isJsonObject()) {
+				JsonObject textures = result.has(TEXTURES_KEY) && result.get(TEXTURES_KEY).isJsonObject()
+					? result.getAsJsonObject(TEXTURES_KEY).deepCopy() : new JsonObject();
+				entry.getValue().getAsJsonObject().entrySet().forEach(binding -> textures.add(binding.getKey(), binding.getValue().deepCopy()));
+				result.add(TEXTURES_KEY, textures);
+			} else {
+				result.add(entry.getKey(), entry.getValue().deepCopy());
+			}
+		}
+		return result;
+	}
+
+	private byte @Nullable [] validateRewrittenModel(Identifier location, JsonObject model) {
 		JsonElement parent = model.get(PARENT_KEY);
 		if (parent != null) {
 			if (!parent.isJsonPrimitive() || !parent.getAsJsonPrimitive().isString()) {
@@ -2451,7 +2658,7 @@ public final class LegacyPackResources implements PackResources {
 	}
 
 	/** Every modern identifier under which this legacy JSON file must be listed. */
-	private static List<Identifier> modernJsonIds(Identifier oldId) {
+	private List<Identifier> modernJsonIds(Identifier oldId) {
 		String path = oldId.getPath();
 		if (!path.endsWith(JSON_SUFFIX)) {
 			return List.of(oldId);
@@ -2463,8 +2670,23 @@ public final class LegacyPackResources implements PackResources {
 		}
 		if (path.startsWith(MODEL_BLOCK_DIR)) {
 			String oldStem = path.substring(MODEL_BLOCK_DIR.length(), path.length() - JSON_SUFFIX.length());
-			return ResourceNameMaps.allBlockModelNames(oldStem).stream()
-				.map(stem -> oldId.withPath(MODEL_BLOCK_DIR + stem + JSON_SUFFIX)).toList();
+			List<Identifier> ids = new java.util.ArrayList<>();
+			for (String stem : ResourceNameMaps.allBlockModelNames(oldStem)) {
+				ids.add(oldId.withPath(MODEL_BLOCK_DIR + stem + JSON_SUFFIX));
+				String directBlock = directBlockItemModel(oldId.getNamespace(), stem);
+				if (directBlock != null) {
+					Identifier target = Identifier.tryParse(directBlock);
+					if (target != null && target.getPath().equals("block/" + stem)) {
+						ids.add(oldId.withPath(MODEL_ITEM_DIR + stem + JSON_SUFFIX));
+					}
+				}
+			}
+			return List.copyOf(ids);
+		}
+		if (path.startsWith(MODEL_ITEM_DIR)) {
+			String oldStem = path.substring(MODEL_ITEM_DIR.length(), path.length() - JSON_SUFFIX.length());
+			return ResourceNameMaps.allItemModelNames(oldStem).stream()
+				.map(stem -> oldId.withPath(MODEL_ITEM_DIR + stem + JSON_SUFFIX)).toList();
 		}
 		return List.of(oldId);
 	}

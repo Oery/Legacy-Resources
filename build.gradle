@@ -107,6 +107,40 @@ tasks.register('verifyChestCompatibility', JavaExec) {
 	}
 }
 
+tasks.register('verifyReportedIssues', JavaExec) {
+	group = 'verification'
+	description = 'Checks the reported custom-model regressions through the converted PureBDcraft pack'
+	classpath = sourceSets.lab.runtimeClasspath
+	mainClass = 'dev.oery.legacyresources.lab.ReportedIssueVerifier'
+	systemProperty 'lab.project', projectDir.absolutePath
+	if (project.hasProperty('lab.packs')) {
+		systemProperty 'lab.packs', project.property('lab.packs')
+	}
+}
+
+tasks.register('verifyLegacyItemTransforms', JavaExec) {
+	group = 'verification'
+	description = 'Checks legacy item display matrices against the 1.8.9 vanilla model tree'
+	classpath = sourceSets.lab.runtimeClasspath
+	mainClass = 'dev.oery.legacyresources.client.convert.LegacyItemTransformVerifier'
+	systemProperty 'lab.project', projectDir.absolutePath
+}
+
+tasks.register('verifyModelCompatibility', JavaExec) {
+	group = 'verification'
+	description = 'Runs converted models, blockstates and item definitions through the game loaders over the full corpus'
+	classpath = sourceSets.lab.runtimeClasspath
+	mainClass = 'dev.oery.legacyresources.lab.ModelCompatibilityVerifier'
+	systemProperty 'lab.project', projectDir.absolutePath
+	if (project.hasProperty('lab.packs')) {
+		systemProperty 'lab.packs', project.property('lab.packs')
+	}
+}
+
+processResources {
+	def version = project.version
+	inputs.property "version", version
+
 	filesMatching("fabric.mod.json") {
 		expand "version": version
 	}

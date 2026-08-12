@@ -1,5 +1,7 @@
 package dev.oery.legacyresources.client.convert;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import net.minecraft.client.Minecraft;
@@ -42,6 +44,23 @@ final class ModernVanillaAssets {
 			PackResources vanilla = source();
 			return vanilla != null && vanilla.getResource(PackType.CLIENT_RESOURCES, loc) != null;
 		});
+	}
+
+	/** Reads a current vanilla data file when conversion needs to retain its item-definition logic. */
+	static byte @Nullable [] read(Identifier location) {
+		PackResources vanilla = source();
+		if (vanilla == null) {
+			return null;
+		}
+		var resource = vanilla.getResource(PackType.CLIENT_RESOURCES, location);
+		if (resource == null) {
+			return null;
+		}
+		try (InputStream in = resource.get()) {
+			return in.readAllBytes();
+		} catch (IOException e) {
+			return null;
+		}
 	}
 
 	/**

@@ -26,6 +26,13 @@ import net.minecraft.util.GsonHelper;
 final class ResourceNameMaps {
 	private static final Names BLOCKSTATES = load("blockstates.json");
 	private static final Names BLOCK_MODELS = load("block_models.json");
+	/*
+	 * Item models were a separate namespace in 1.8.  Do not infer this from texture aliases: a
+	 * block item may use a wrapper whose name says nothing about its sprite (grass is the common
+	 * example).  Keeping the small, explicit table here also lets listing expose aliases under the
+	 * identifier selected by a current item definition.
+	 */
+	private static final Names ITEM_MODELS = load("item_models.json");
 
 	private ResourceNameMaps() {
 	}
@@ -53,6 +60,20 @@ final class ResourceNameMaps {
 	 */
 	static List<String> allBlockModelNames(String oldStem) {
 		List<String> mapped = newBlockModelNames(oldStem);
+		if (mapped.size() == 1 && mapped.getFirst().equals(oldStem)) {
+			return mapped;
+		}
+		List<String> all = new ArrayList<>(mapped);
+		all.add(oldStem);
+		return List.copyOf(all);
+	}
+
+	static String oldItemModelName(String newStem) {
+		return ITEM_MODELS.oldName(newStem);
+	}
+
+	static List<String> allItemModelNames(String oldStem) {
+		List<String> mapped = ITEM_MODELS.newNames(oldStem);
 		if (mapped.size() == 1 && mapped.getFirst().equals(oldStem)) {
 			return mapped;
 		}

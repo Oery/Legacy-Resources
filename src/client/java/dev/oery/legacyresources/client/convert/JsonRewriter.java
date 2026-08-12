@@ -15,6 +15,7 @@ import org.jspecify.annotations.Nullable;
 final class JsonRewriter {
 	private static final String OLD_BLOCK_PREFIX = "blocks/";
 	private static final String OLD_ITEM_PREFIX = "items/";
+	private static final String DISPLAY_KEY = "display";
 
 	private JsonRewriter() {
 	}
@@ -39,6 +40,64 @@ final class JsonRewriter {
 		} else {
 			return element;
 		}
+	}
+
+	static JsonObject blockItemWrapper(String parent) {
+		JsonObject model = new JsonObject();
+		model.addProperty("parent", parent);
+		model.add(DISPLAY_KEY, modernBlockDisplay());
+		return model;
+	}
+
+	private static JsonObject modernBlockDisplay() {
+		JsonObject display = new JsonObject();
+		display.add("gui", transform(30, 225, 0, 0, 0, 0, .625));
+		display.add("ground", transform(0, 0, 0, 0, 3, 0, .25));
+		display.add("fixed", transform(0, 0, 0, 0, 0, 0, .5));
+		display.add("on_shelf", transform(0, 180, 0, 0, 0, 0, 1));
+		display.add("thirdperson_righthand", transform(75, 45, 0, 0, 2.5, 0, .375));
+		display.add("firstperson_righthand", transform(0, 45, 0, 0, 0, 0, .4));
+		display.add("firstperson_lefthand", transform(0, 225, 0, 0, 0, 0, .4));
+		return display;
+	}
+
+	private static JsonObject transform(double rx, double ry, double rz, double tx, double ty, double tz, double scale) {
+		return transform(rx, ry, rz, tx, ty, tz, scale, scale, scale);
+	}
+
+	private static JsonObject transform(double rx, double ry, double rz, double tx, double ty, double tz,
+		double sx, double sy, double sz) {
+		JsonObject transform = new JsonObject();
+		transform.add("rotation", vector(rx, ry, rz));
+		transform.add("translation", vector(tx, ty, tz));
+		transform.add("scale", vector(sx, sy, sz));
+		return transform;
+	}
+
+	private static JsonArray vector(double x, double y, double z) {
+		JsonArray vector = new JsonArray();
+		vector.add(x);
+		vector.add(y);
+		vector.add(z);
+		return vector;
+	}
+
+	/** Repoints a vanilla block-item definition at the converted legacy item wrapper. */
+	static JsonElement routeBlockItemDefinition(JsonElement definition, String itemModel) {
+		JsonElement copy = definition.deepCopy();
+		if (!copy.isJsonObject()) return copy;
+		JsonObject root = copy.getAsJsonObject();
+		JsonElement model = root.get("model");
+		if (model != null && model.isJsonObject()) {
+			JsonObject selected = model.getAsJsonObject();
+			JsonElement type = selected.get("type");
+			JsonElement target = selected.get("model");
+			if (type != null && type.isJsonPrimitive() && type.getAsString().equals("minecraft:model")
+				&& target != null && target.isJsonPrimitive() && target.getAsString().contains(":block/")) {
+				selected.addProperty("model", itemModel);
+			}
+		}
+		return copy;
 	}
 
 	/** Rewrites a legacy bed model to the derived sheets matching one modern bed colour. */
