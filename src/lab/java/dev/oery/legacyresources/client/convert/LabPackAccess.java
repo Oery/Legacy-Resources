@@ -56,4 +56,9 @@ public final class LabPackAccess {
 	public static void useModernVanillaAssets(@Nullable PackResources resources) {
 		ModernVanillaAssets.useSource(resources);
 	}
+
+	/** Supplies vanilla 1.8.9 models to the optional legacy item-model fallback in headless checks. */
+	public static void useLegacyVanillaAssets(@Nullable PackResources resources) {
+		LegacyVanillaAssets.useSource(resources);
+	}
 }

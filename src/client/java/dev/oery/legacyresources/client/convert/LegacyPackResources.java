@@ -236,6 +236,10 @@ public final class LegacyPackResources implements PackResources {
 	private static final String ITEM_DEFINITION_DIR = "items/";
 	private static final String BLOCKSTATES_DIR = "blockstates/";
 	private static final String MODEL_DIR = "models/";
+	private static final List<String> ITEM_DISPLAY_CONTEXTS = List.of(
+		"thirdperson_righthand", "thirdperson_lefthand", "firstperson_righthand", "firstperson_lefthand",
+		"head", "gui", "ground", "fixed", "on_shelf"
+	);
 	/** The two JSON trees below, as {@link #listResources} is asked for them (no trailing slash). */
 	private static final String MODEL_ROOT = "models";
 	private static final String BLOCKSTATES_ROOT = "blockstates";
@@ -665,6 +669,15 @@ public final class LegacyPackResources implements PackResources {
 					}
 				}
 			});
+			if (namespace.equals("minecraft") && directoryCovers(directory, MODEL_ITEM_DIR.substring(0, MODEL_ITEM_DIR.length() - 1))) {
+				for (Identifier definition : ModernVanillaAssets.list(namespace, ITEM_DEFINITION_ROOT)) {
+					if (!definition.getPath().startsWith(ITEM_DEFINITION_DIR) || !definition.getPath().endsWith(JSON_SUFFIX)) continue;
+					String stem = definition.getPath().substring(ITEM_DEFINITION_DIR.length(), definition.getPath().length() - JSON_SUFFIX.length());
+					Identifier model = definition.withPath(MODEL_ITEM_DIR + stem + JSON_SUFFIX);
+					IoSupplier<InputStream> converted = getResource(PackType.CLIENT_RESOURCES, model);
+					if (converted != null) output.accept(model, converted);
+				}
+			}
 			if (namespace.equals("minecraft") && directoryCovers(directory, BLOCKSTATES_ROOT) && hasCustomLegacyBedModels(namespace)) {
 				for (String color : BED_COLORS) {
 					announceComputedBlockstate(namespace, color + "_bed", output);
@@ -696,6 +709,13 @@ public final class LegacyPackResources implements PackResources {
 					if (converted != null) output.accept(definition, converted);
 				}
 			});
+			if (namespace.equals("minecraft")) {
+				for (Identifier definition : ModernVanillaAssets.list(namespace, ITEM_DEFINITION_ROOT)) {
+					if (!definition.getPath().startsWith(ITEM_DEFINITION_DIR) || !definition.getPath().endsWith(JSON_SUFFIX)) continue;
+					IoSupplier<InputStream> converted = getResource(PackType.CLIENT_RESOURCES, definition);
+					if (converted != null) output.accept(definition, converted);
+				}
+			}
 			return;
 		}
 		if (isOrUnder(directory, "textures/entity/chest")) {
@@ -1927,13 +1947,13 @@ public final class LegacyPackResources implements PackResources {
 	}
 
 	private byte @Nullable [] computeItemModel(Identifier location, String stem) {
-		if (stem.equals("soul_torch")) {
+		if (stem.equals("soul_torch") && hasCustomSoulTorchItemModel(location.getNamespace())) {
 			byte[] custom = soulTorchItemModel(location);
 			if (custom != null) {
 				return custom;
 			}
 		}
-		if (stem.equals("copper_torch")) {
+		if (stem.equals("copper_torch") && hasCustomCopperTorchItemModel(location.getNamespace())) {
 			byte[] custom = copperTorchItemModel(location);
 			if (custom != null) {
 				return custom;
@@ -1944,13 +1964,14 @@ public final class LegacyPackResources implements PackResources {
 		}
 		String namespace = location.getNamespace();
 		String blockParent = directBlockItemModel(namespace, stem);
+		if (LegacyVanillaAssets.has(location)) {
+			return tryRewriteItemModel(location, stem);
+		}
 		if (blockParent != null) {
-			Identifier parentId = Identifier.tryParse(blockParent);
-			if (parentId != null) {
-				String parentStem = parentId.getPath().substring("block/".length());
-				Identifier legacyBlock = location.withPath(MODEL_BLOCK_DIR + ResourceNameMaps.oldBlockModelName(parentStem) + JSON_SUFFIX);
-				if (packHas(legacyBlock)) {
-					return GSON.toJson(JsonRewriter.blockItemWrapper(blockParent)).getBytes(StandardCharsets.UTF_8);
+			if (packOverridesModernModelChain(namespace, blockParent)) {
+				JsonObject display = modernModelDisplay(blockParent);
+				if (display != null) {
+					return GSON.toJson(JsonRewriter.blockItemWrapper(blockParent, display)).getBytes(StandardCharsets.UTF_8);
 				}
 			}
 		}
@@ -1970,15 +1991,12 @@ public final class LegacyPackResources implements PackResources {
 		if (vanilla == null) return null;
 		try {
 			JsonElement parsed = JsonParser.parseString(new String(vanilla, StandardCharsets.UTF_8));
-			boolean hasLegacyWrapper = packHas(legacyModel) && tryRewriteItemModel(legacyModel, stem) != null;
+			boolean hasLegacyWrapper = (packHas(legacyModel) || LegacyVanillaAssets.has(legacyModel))
+				&& tryRewriteItemModel(legacyModel, stem) != null;
 			String directBlock = directBlockModel(parsed);
 			if (!hasLegacyWrapper && directBlock == null) return null;
 			if (!hasLegacyWrapper) {
-				Identifier parentId = Identifier.tryParse(directBlock);
-				if (parentId == null || !parentId.getPath().startsWith("block/")) return null;
-				String parentStem = parentId.getPath().substring("block/".length());
-				Identifier legacyBlock = location.withPath(MODEL_BLOCK_DIR + ResourceNameMaps.oldBlockModelName(parentStem) + JSON_SUFFIX);
-				if (!packHas(legacyBlock)) return null;
+				if (!packOverridesModernModelChain(location.getNamespace(), directBlock)) return null;
 			}
 			JsonElement routed = JsonRewriter.routeBlockItemDefinition(parsed, location.getNamespace() + ":item/" + stem);
 			return GSON.toJson(routed).getBytes(StandardCharsets.UTF_8);
@@ -2013,11 +2031,85 @@ public final class LegacyPackResources implements PackResources {
 		return id != null && id.getPath().startsWith("block/") ? value : null;
 	}
 
+	/** Whether this pack replaces any legacy counterpart in a current block model's vanilla parent chain. */
+	private boolean packOverridesModernModelChain(String namespace, String modelName) {
+		Identifier modelId = Identifier.tryParse(modelName);
+		if (modelId == null || !modelId.getPath().startsWith("block/")) return false;
+		Identifier current = Identifier.fromNamespaceAndPath(modelId.getNamespace(), MODEL_DIR + modelId.getPath() + JSON_SUFFIX);
+		Set<Identifier> visited = new HashSet<>();
+		for (int depth = 0; depth < 128 && visited.add(current); depth++) {
+			String path = current.getPath();
+			if (!path.startsWith(MODEL_BLOCK_DIR) || !path.endsWith(JSON_SUFFIX)) return false;
+			String stem = path.substring(MODEL_BLOCK_DIR.length(), path.length() - JSON_SUFFIX.length());
+			Identifier legacy = Identifier.fromNamespaceAndPath(namespace,
+				MODEL_BLOCK_DIR + ResourceNameMaps.oldBlockModelName(stem) + JSON_SUFFIX);
+			if (packHas(current) || packHas(legacy)) return true;
+			byte[] bytes = ModernVanillaAssets.read(current);
+			if (bytes == null) return false;
+			Identifier parent = modelParent(bytes);
+			if (parent == null || !parent.getPath().startsWith("block/")) return false;
+			current = Identifier.fromNamespaceAndPath(parent.getNamespace(), MODEL_DIR + parent.getPath() + JSON_SUFFIX);
+		}
+		return false;
+	}
+
+	/** Resolves the exact current-vanilla presentation inherited by one block model, child first. */
+	private static @Nullable JsonObject modernModelDisplay(String modelName) {
+		Identifier modelId = Identifier.tryParse(modelName);
+		if (modelId == null || !modelId.getPath().startsWith("block/")) return null;
+		Identifier current = Identifier.fromNamespaceAndPath(modelId.getNamespace(), MODEL_DIR + modelId.getPath() + JSON_SUFFIX);
+		JsonObject resolved = new JsonObject();
+		Set<Identifier> visited = new HashSet<>();
+		for (int depth = 0; depth < 128 && visited.add(current); depth++) {
+			byte[] bytes = ModernVanillaAssets.read(current);
+			if (bytes == null) break;
+			JsonObject model;
+			try {
+				JsonElement parsed = JsonParser.parseString(new String(bytes, StandardCharsets.UTF_8));
+				if (!parsed.isJsonObject()) return null;
+				model = parsed.getAsJsonObject();
+			} catch (JsonParseException e) {
+				return null;
+			}
+			JsonElement display = model.get("display");
+			if (display != null) {
+				if (!display.isJsonObject()) return null;
+				for (String context : ITEM_DISPLAY_CONTEXTS) {
+					JsonElement value = display.getAsJsonObject().get(context);
+					if (value != null && !resolved.has(context)) {
+						if (!value.isJsonObject()) return null;
+						resolved.add(context, value.deepCopy());
+					}
+				}
+			}
+			Identifier parent = modelParent(model);
+			if (parent == null || parent.getPath().startsWith("builtin/")) break;
+			current = Identifier.fromNamespaceAndPath(parent.getNamespace(), MODEL_DIR + parent.getPath() + JSON_SUFFIX);
+		}
+		return resolved.isEmpty() ? null : resolved;
+	}
+
+	private static @Nullable Identifier modelParent(byte[] bytes) {
+		try {
+			JsonElement parsed = JsonParser.parseString(new String(bytes, StandardCharsets.UTF_8));
+			return parsed.isJsonObject() ? modelParent(parsed.getAsJsonObject()) : null;
+		} catch (JsonParseException e) {
+			return null;
+		}
+	}
+
+	private static @Nullable Identifier modelParent(JsonObject model) {
+		JsonElement parent = model.get(PARENT_KEY);
+		if (parent == null || !parent.isJsonPrimitive() || !parent.getAsJsonPrimitive().isString()) return null;
+		return Identifier.tryParse(parent.getAsString());
+	}
+
 	private byte @Nullable [] tryRewriteItemModel(Identifier location, String modernStem) {
-		JsonElement parsed = readJson(location);
+		boolean vanillaRoot = !packHas(location) && LegacyVanillaAssets.has(location);
+		JsonElement parsed = readLegacyItemJson(location);
 		if (parsed == null || !parsed.isJsonObject()) return null;
 		LegacyItemTransformConverter.Result presentation = LegacyItemTransformConverter.convert(location, modelLocation -> {
-			JsonElement candidate = readJson(modelLocation);
+			JsonElement candidate = readLegacyItemJson(modelLocation);
 			return candidate != null && candidate.isJsonObject() ? candidate.getAsJsonObject() : null;
 		});
 		if (!presentation.succeeded()) {
@@ -2036,6 +2128,10 @@ public final class LegacyPackResources implements PackResources {
 		if (parentName.equals("builtin/generated") || parentName.equals("builtin/compass")
 			|| parentName.equals("builtin/clock")) {
 			model.addProperty(PARENT_KEY, "minecraft:item/generated");
+		}
+		if (vanillaRoot) {
+			String currentBlockParent = directBlockItemModel(location.getNamespace(), modernStem);
+			if (currentBlockParent != null) model.addProperty(PARENT_KEY, currentBlockParent);
 		}
 		model.remove("display");
 		JsonObject display = presentation.display();
@@ -2496,6 +2592,19 @@ public final class LegacyPackResources implements PackResources {
 			return JsonParser.parseReader(new InputStreamReader(in, StandardCharsets.UTF_8));
 		} catch (IOException | JsonParseException e) {
 			LegacyResources.LOGGER.warn("Failed to read {} in legacy pack {}", location, location().id(), e);
+			return null;
+		}
+	}
+
+	/** Item-model lookup uses the pack as an overlay on the user's locally installed vanilla 1.8.9 models. */
+	private @Nullable JsonElement readLegacyItemJson(Identifier location) {
+		JsonElement direct = readJson(location);
+		if (direct != null || packHas(location)) return direct;
+		byte[] vanilla = LegacyVanillaAssets.read(location);
+		if (vanilla == null) return null;
+		try {
+			return JsonParser.parseString(new String(vanilla, StandardCharsets.UTF_8));
+		} catch (JsonParseException e) {
 			return null;
 		}
 	}

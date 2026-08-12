@@ -42,44 +42,11 @@ final class JsonRewriter {
 		}
 	}
 
-	static JsonObject blockItemWrapper(String parent) {
+	static JsonObject blockItemWrapper(String parent, JsonObject display) {
 		JsonObject model = new JsonObject();
 		model.addProperty("parent", parent);
-		model.add(DISPLAY_KEY, modernBlockDisplay());
+		model.add(DISPLAY_KEY, display);
 		return model;
-	}
-
-	private static JsonObject modernBlockDisplay() {
-		JsonObject display = new JsonObject();
-		display.add("gui", transform(30, 225, 0, 0, 0, 0, .625));
-		display.add("ground", transform(0, 0, 0, 0, 3, 0, .25));
-		display.add("fixed", transform(0, 0, 0, 0, 0, 0, .5));
-		display.add("on_shelf", transform(0, 180, 0, 0, 0, 0, 1));
-		display.add("thirdperson_righthand", transform(75, 45, 0, 0, 2.5, 0, .375));
-		display.add("firstperson_righthand", transform(0, 45, 0, 0, 0, 0, .4));
-		display.add("firstperson_lefthand", transform(0, 225, 0, 0, 0, 0, .4));
-		return display;
-	}
-
-	private static JsonObject transform(double rx, double ry, double rz, double tx, double ty, double tz, double scale) {
-		return transform(rx, ry, rz, tx, ty, tz, scale, scale, scale);
-	}
-
-	private static JsonObject transform(double rx, double ry, double rz, double tx, double ty, double tz,
-		double sx, double sy, double sz) {
-		JsonObject transform = new JsonObject();
-		transform.add("rotation", vector(rx, ry, rz));
-		transform.add("translation", vector(tx, ty, tz));
-		transform.add("scale", vector(sx, sy, sz));
-		return transform;
-	}
-
-	private static JsonArray vector(double x, double y, double z) {
-		JsonArray vector = new JsonArray();
-		vector.add(x);
-		vector.add(y);
-		vector.add(z);
-		return vector;
 	}
 
 	/** Repoints a vanilla block-item definition at the converted legacy item wrapper. */

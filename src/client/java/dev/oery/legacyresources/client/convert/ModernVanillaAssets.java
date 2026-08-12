@@ -2,6 +2,7 @@ package dev.oery.legacyresources.client.convert;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import net.minecraft.client.Minecraft;
@@ -32,6 +33,7 @@ final class ModernVanillaAssets {
 	 * questions about the same handful of shared parent models.
 	 */
 	private static final Map<Identifier, Boolean> CACHE = new ConcurrentHashMap<>();
+	private static final Map<String, List<Identifier>> LIST_CACHE = new ConcurrentHashMap<>();
 
 	private static volatile boolean sourceOverridden;
 	private static volatile @Nullable PackResources source;
@@ -63,6 +65,17 @@ final class ModernVanillaAssets {
 		}
 	}
 
+	/** Lists current vanilla data files so computed legacy wrappers are discoverable by tree-scanning loaders. */
+	static List<Identifier> list(String namespace, String directory) {
+		return LIST_CACHE.computeIfAbsent(namespace + '\0' + directory, key -> {
+			PackResources vanilla = source();
+			if (vanilla == null) return List.of();
+			java.util.ArrayList<Identifier> ids = new java.util.ArrayList<>();
+			vanilla.listResources(PackType.CLIENT_RESOURCES, namespace, directory, (id, supplier) -> ids.add(id));
+			return List.copyOf(ids);
+		});
+	}
+
 	/**
 	 * Points the lookup at something other than the running client's own vanilla pack, for the
 	 * derivation lab - which has no {@link Minecraft} instance at all and reads the targeted version's
@@ -74,6 +87,7 @@ final class ModernVanillaAssets {
 		source = resources;
 		sourceOverridden = true;
 		CACHE.clear();
+		LIST_CACHE.clear();
 	}
 
 	private static @Nullable PackResources source() {

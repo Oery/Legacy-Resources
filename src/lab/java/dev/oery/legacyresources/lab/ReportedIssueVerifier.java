@@ -3,7 +3,9 @@ package dev.oery.legacyresources.lab;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import dev.oery.legacyresources.client.convert.LabPackAccess;
 import java.awt.Color;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
@@ -28,7 +30,9 @@ import net.minecraft.server.Bootstrap;
 import net.minecraft.server.packs.PackLocationInfo;
 import net.minecraft.server.packs.PackResources;
 import net.minecraft.server.packs.PackType;
+import net.minecraft.server.packs.FilePackResources;
 import net.minecraft.server.packs.PathPackResources;
+import net.minecraft.server.packs.repository.Pack;
 import net.minecraft.server.packs.repository.PackSource;
 import net.minecraft.server.packs.resources.MultiPackResourceManager;
 import net.minecraft.world.item.ItemDisplayContext;
@@ -48,6 +52,9 @@ public final class ReportedIssueVerifier {
 		LabPack bdcraft = corpus.packs().stream()
 			.filter(pack -> pack.name().toLowerCase().contains("purebdcraft")).findFirst()
 			.orElseThrow(() -> new IllegalStateException("PureBDcraft is required for this regression check"));
+		LabPack occult = corpus.packs().stream()
+			.filter(pack -> pack.name().toLowerCase().contains("occult")).findFirst()
+			.orElseThrow(() -> new IllegalStateException("Occult is required for this regression check"));
 		LabPack control = corpus.control();
 		if (control == null) throw new IllegalStateException("1.8.9 vanilla control is required for item-model checks");
 		verifyItemDefinitionRouting(control);
@@ -58,6 +65,15 @@ public final class ReportedIssueVerifier {
 		verifyGameLoader(corpus, control, "torch", .5, .68);
 		verifyGameLoader(corpus, bdcraft, "stone", .25, .4);
 		verifyGameLoader(corpus, bdcraft, "torch", .375, .64);
+		verifyLegacyBlockItemPresentation(bdcraft, "oak_fence", false);
+		verifyLegacyBlockItemPresentation(bdcraft, "oak_trapdoor", true);
+		verifyLegacyBlockItemPresentation(bdcraft, "iron_trapdoor", true);
+		verifyLegacyBlockItemPresentation(occult, "oak_trapdoor", true);
+		verifyGameLoader(corpus, bdcraft, "oak_fence", .25, .4);
+		verifyGameLoader(corpus, bdcraft, "oak_trapdoor", .25, .4);
+		verifyGameLoader(corpus, bdcraft, "iron_trapdoor", .25, .4);
+		verifyGameLoader(corpus, occult, "oak_trapdoor", .25, .4);
+		verifyMissingLegacyJarFallback(corpus, project, packs);
 		verifyTrapdoorGeometry(bdcraft);
 		verifyRabbitSource(bdcraft);
 		verifyChestConversion(bdcraft);
@@ -122,6 +138,70 @@ public final class ReportedIssueVerifier {
 			|| Math.abs(number(display.getAsJsonObject("ground").getAsJsonArray("scale"), 0) - .375) > 1.0e-5
 			|| Math.abs(number(display.getAsJsonObject("head").getAsJsonArray("scale"), 0) - 1.5) > 1.0e-5) {
 			throw new IllegalStateException("Custom item did not preserve its effective legacy presentation: " + display);
+		}
+	}
+
+	private static void verifyLegacyBlockItemPresentation(LabPack pack, String stem, boolean trapdoor) {
+		JsonObject definition = model(pack, "items/" + stem + ".json");
+		if (!("minecraft:item/" + stem).equals(definition.getAsJsonObject("model").get("model").getAsString())) {
+			throw new IllegalStateException("Legacy block item was not routed through its converted wrapper: " + stem);
+		}
+		JsonObject display = model(pack, "models/item/" + stem + ".json").getAsJsonObject("display");
+		JsonObject first = display == null ? null : display.getAsJsonObject("firstperson_righthand");
+		JsonObject third = display == null ? null : display.getAsJsonObject("thirdperson_righthand");
+		if (first == null || third == null
+			|| Math.abs(number(first.getAsJsonArray("scale"), 0) - .4) > 1.0e-5
+			|| Math.abs(number(third.getAsJsonArray("scale"), 0) - .375) > 1.0e-5) {
+			throw new IllegalStateException("Legacy block item lost its converted held scales: " + stem + " in " + pack.name());
+		}
+		if (trapdoor) {
+			if (Math.abs(number(first.getAsJsonArray("translation"), 1) - 4) > 1.0e-5
+				|| Math.abs(number(third.getAsJsonArray("translation"), 2) - 2.5) > 1.0e-5) {
+				throw new IllegalStateException("Trapdoor lost its legacy held offsets: " + stem + " in " + pack.name());
+			}
+		} else if (Math.abs(number(third.getAsJsonArray("rotation"), 0) - 90) > 1.0e-5
+			|| Math.abs(number(third.getAsJsonArray("rotation"), 1)) > 1.0e-5) {
+			throw new IllegalStateException("Fence lost its legacy third-person pose in " + pack.name());
+		}
+		if (!pack.listedPaths("items").contains("items/" + stem + ".json")
+			|| !pack.listedPaths("models").contains("models/item/" + stem + ".json")) {
+			throw new IllegalStateException("Legacy block item wrapper was not announced: " + stem + " in " + pack.name());
+		}
+	}
+
+	private static void verifyMissingLegacyJarFallback(PackCorpus corpus, Path project, Path packs) {
+		Path occultZip;
+		try (var files = Files.list(packs)) {
+			occultZip = files.filter(path -> path.getFileName().toString().toLowerCase().contains("occult"))
+				.findFirst().orElseThrow(() -> new IllegalStateException("Occult is required for the missing-jar check"));
+		} catch (java.io.IOException e) {
+			throw new IllegalStateException("Cannot enumerate resource packs", e);
+		}
+		LabPackAccess.useLegacyVanillaAssets(null);
+		PackLocationInfo info = new PackLocationInfo("occult-no-legacy-jar", Component.literal("occult-no-legacy-jar"),
+			PackSource.DEFAULT, Optional.empty());
+		Pack.ResourcesSupplier supplier = new FilePackResources.FileResourcesSupplier(occultZip);
+		PackResources converted = LabPackAccess.openIfLegacy(supplier, info);
+		if (converted == null) throw new IllegalStateException("Occult was not recognized as a legacy pack");
+		try {
+			LabPack pack = new LabPack("occult-no-legacy-jar", "Occult without 1.8.9", converted);
+			JsonObject display = model(pack, "models/item/oak_trapdoor.json").getAsJsonObject("display");
+			JsonObject first = display.getAsJsonObject("firstperson_righthand");
+			JsonObject third = display.getAsJsonObject("thirdperson_righthand");
+			if (Math.abs(number(first.getAsJsonArray("scale"), 0) - .4) > 1.0e-5
+				|| Math.abs(number(first.getAsJsonArray("translation"), 1) - 4.2) > 1.0e-5
+				|| Math.abs(number(third.getAsJsonArray("scale"), 0) - .375) > 1.0e-5
+				|| Math.abs(number(third.getAsJsonArray("translation"), 2) - 2) > 1.0e-5) {
+				throw new IllegalStateException("Missing 1.8.9 jar did not fall back to thin_block presentation: " + display);
+			}
+			verifyGameLoader(corpus, pack, "oak_trapdoor", .25, .4);
+		} finally {
+			converted.close();
+			Path legacy = project.resolve("reference/1.8.9/assets");
+			LabPackAccess.useLegacyVanillaAssets(new PathPackResources(
+				new PackLocationInfo("legacy-control", Component.literal("legacy-control"), PackSource.BUILT_IN, Optional.empty()),
+				legacy
+			));
 		}
 	}
 

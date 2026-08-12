@@ -64,6 +64,11 @@ final class PackCorpus {
 			new PackLocationInfo(MODERN_ASSETS_ID, Component.literal(MODERN_ASSETS_ID), PackSource.BUILT_IN, Optional.empty()),
 			modernAssets
 		));
+		Path legacyAssets = existingDirectory(projectDirectory.resolve(VANILLA_LEGACY_ASSETS));
+		LabPackAccess.useLegacyVanillaAssets(legacyAssets == null ? null : new PathPackResources(
+			new PackLocationInfo(CONTROL_ID, Component.literal(CONTROL_ID), PackSource.BUILT_IN, Optional.empty()),
+			legacyAssets
+		));
 		try (Stream<Path> entries = Files.list(packsDirectory)) {
 			List<Path> zips = entries
 				.filter(path -> path.getFileName().toString().endsWith(".zip"))

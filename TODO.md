@@ -493,3 +493,7 @@ that fails silently - an unannounced sprite renders as vanilla's art with nothin
       pack-consistent face details rather than using a direct compatibility mapping.
 - [ ] beds model dont work correctly (bdcraft)
 - [ ] the concrete derived from concrete powder looks too similar to the powder (bdcraft)
+- [ ] Improve Minecraft 1.8.9 jar detection beyond the default launcher path, including custom
+      game directories and third-party launchers.
+- [ ] Warn the user when the optional Minecraft 1.8.9 jar is missing or unreadable and legacy
+      item-model fallback is therefore unavailable.
