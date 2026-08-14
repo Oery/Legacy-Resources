@@ -11,6 +11,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import net.minecraft.client.resources.model.cuboid.ItemTransform;
 import net.minecraft.client.resources.model.cuboid.ItemTransforms;
 import net.minecraft.DetectedVersion;
@@ -75,6 +76,7 @@ public final class ReportedIssueVerifier {
 		verifyGameLoader(corpus, occult, "oak_trapdoor", .25, .4);
 		verifyMissingLegacyJarFallback(corpus, project, packs);
 		verifyTrapdoorGeometry(bdcraft);
+		verifyFenceTextureBindings(bdcraft);
 		verifyRabbitSource(bdcraft);
 		verifyChestConversion(bdcraft);
 		verifyLegacyVariants(bdcraft);
@@ -319,6 +321,60 @@ public final class ReportedIssueVerifier {
 			JsonObject textures = model.getAsJsonObject("textures");
 			if (textures == null || !("minecraft:block/" + wood + "_trapdoor").equals(textures.get("texture").getAsString())) {
 				throw new IllegalStateException("Derived " + wood + " trapdoor did not bind its derived texture");
+			}
+		}
+	}
+
+	/** Exercises inherited texture-slot resolution, not merely sprite existence in the atlas. */
+	private static void verifyFenceTextureBindings(LabPack pack) {
+		Map<Identifier, Identifier> expectedByModel = new HashMap<>();
+		Set<String> listed = pack.listedPaths("models");
+		for (String wood : List.of("mangrove", "cherry", "crimson", "warped", "pale_oak")) {
+			String expectedTexture = "minecraft:block/" + wood + "_planks";
+			Identifier expected = Identifier.fromNamespaceAndPath("minecraft", "block/" + wood + "_planks");
+			for (String shape : List.of("post", "inventory")) {
+				String stem = wood + "_fence_" + shape;
+				JsonObject model = model(pack, "models/block/" + stem + ".json");
+				JsonObject textures = model.getAsJsonObject("textures");
+				for (String slot : List.of("texture", "side", "top", "particle")) {
+					if (textures == null || textures.get(slot) == null || !expectedTexture.equals(textures.get(slot).getAsString())) {
+						throw new IllegalStateException("Derived " + wood + " fence wrapper does not bind #" + slot + ": " + model);
+					}
+				}
+				if (!listed.contains("models/block/" + stem + ".json")) {
+					throw new IllegalStateException("Derived " + wood + " fence wrapper was served but not announced: " + stem);
+				}
+				expectedByModel.put(Identifier.fromNamespaceAndPath("minecraft", "block/" + stem), expected);
+			}
+		}
+
+		MultiPackResourceManager manager = new MultiPackResourceManager(
+			PackType.CLIENT_RESOURCES, List.of(pack.resources())
+		);
+		FileToIdConverter models = FileToIdConverter.json("models");
+		Map<Identifier, UnbakedModel> parsed = new HashMap<>();
+		models.listMatchingResources(manager).forEach((file, resource) -> {
+			try (var reader = resource.openAsReader()) {
+				parsed.put(models.fileToId(file), CuboidModel.fromStream(reader));
+			} catch (Exception e) {
+				throw new IllegalStateException("Game model codec rejected " + file, e);
+			}
+		});
+		ModelDiscovery discovery = new ModelDiscovery(parsed, MissingCuboidModel.missingModel());
+		for (Identifier id : expectedByModel.keySet()) {
+			discovery.addRoot(resolver -> resolver.markDependency(id));
+		}
+		Map<Identifier, ResolvedModel> resolved = discovery.resolve();
+		for (Map.Entry<Identifier, Identifier> expectedEntry : expectedByModel.entrySet()) {
+			Identifier id = expectedEntry.getKey();
+			ResolvedModel model = resolved.get(id);
+			if (model == null) throw new IllegalStateException("Game dependency loader did not resolve " + id);
+			var slots = model.getTopTextureSlots();
+			for (String slot : List.of("texture", "side", "top", "particle")) {
+				var material = slots.getMaterial(slot);
+				if (material == null || !expectedEntry.getValue().equals(material.sprite())) {
+					throw new IllegalStateException(id + " leaves #" + slot + " unresolved: " + material);
+				}
 			}
 		}
 	}

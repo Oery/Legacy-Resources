@@ -83,6 +83,19 @@ public final class LegacyPackResources implements PackResources {
 		"pale_oak_trapdoor_bottom", "pale_oak_trapdoor_open", "pale_oak_trapdoor_top"
 	);
 	/**
+	 * Modern fence wrappers bind {@code #texture}, but a legacy pack may replace the unchanged
+	 * generic {@code fence_post}/{@code fence_inventory} parents with geometry that instead samples
+	 * {@code #side} and {@code #top}. Legacy-era woods have their own wrappers that supply those
+	 * variables; these later woods do not, so synthesize the missing compatibility layer for them.
+	 */
+	private static final Set<String> DERIVED_WOOD_FENCE_MODEL_STEMS = Set.of(
+		"mangrove_fence_post", "mangrove_fence_inventory",
+		"cherry_fence_post", "cherry_fence_inventory",
+		"crimson_fence_post", "crimson_fence_inventory",
+		"warped_fence_post", "warped_fence_inventory",
+		"pale_oak_fence_post", "pale_oak_fence_inventory"
+	);
+	/**
 	 * Block model stems that must never receive the generic {@link #computeBlockModel} fallback,
 	 * because their real vanilla model is a thin/sculpted shape (built from a template parent, or a
 	 * multi-face plane) rather than a {@code cube_all}, yet their stem happens to exactly match a
@@ -679,6 +692,11 @@ public final class LegacyPackResources implements PackResources {
 		}
 		if (namespace.equals("minecraft") && directoryCovers(directory, "models/item") && hasCustomCopperTorchItemModel(namespace)) {
 			announceComputedItemModel(namespace, "copper_torch", output);
+		}
+		if (namespace.equals("minecraft") && directoryCovers(directory, "models/block")) {
+			for (String stem : DERIVED_WOOD_FENCE_MODEL_STEMS) {
+				announceComputedModel(namespace, stem, output);
+			}
 		}
 		if (jsonTreeQueried(directory, MODEL_ROOT) || jsonTreeQueried(directory, BLOCKSTATES_ROOT)) {
 			// Models and blockstates only ever reach the game through listing - ModelManager and
@@ -1890,6 +1908,9 @@ public final class LegacyPackResources implements PackResources {
 			}
 			return tryRewriteModel(location, bedColor(stem, location), stem);
 		}
+		if (DERIVED_WOOD_FENCE_MODEL_STEMS.contains(stem)) {
+			return derivedWoodFenceModel(location, stem);
+		}
 		String namespace = location.getNamespace();
 		if (NO_GENERIC_FALLBACK_MODEL_STEMS.contains(stem)) {
 			return null;
@@ -1991,6 +2012,27 @@ public final class LegacyPackResources implements PackResources {
 		} catch (JsonParseException e) {
 			return null;
 		}
+	}
+
+	/** Supplies both eras' texture variables while retaining the pack's generic fence geometry. */
+	private byte @Nullable [] derivedWoodFenceModel(Identifier requested, String targetStem) {
+		String suffix = targetStem.endsWith("_fence_post") ? "_fence_post" : "_fence_inventory";
+		String wood = targetStem.substring(0, targetStem.length() - suffix.length());
+		String texture = requested.getNamespace() + ":block/" + wood + "_planks";
+		Identifier targetTexture = Identifier.fromNamespaceAndPath(
+			requested.getNamespace(), NEW_BLOCK_TEXTURE_DIR + wood + "_planks.png"
+		);
+		if (getResource(PackType.CLIENT_RESOURCES, targetTexture) == null) return null;
+
+		JsonObject model = new JsonObject();
+		model.addProperty(PARENT_KEY, requested.getNamespace() + ":block/fence_" + (suffix.equals("_fence_post") ? "post" : "inventory"));
+		JsonObject textures = new JsonObject();
+		textures.addProperty("texture", texture);
+		textures.addProperty("side", texture);
+		textures.addProperty("top", texture);
+		textures.addProperty("particle", texture);
+		model.add(TEXTURES_KEY, textures);
+		return GSON.toJson(model).getBytes(StandardCharsets.UTF_8);
 	}
 
 	/** Converts the pack's regular torch geometry, then rebinds it to the two soul-fire sprites. */
