@@ -15,7 +15,9 @@ public final class LegacyEndermanModel {
 		PartDefinition head=r.addOrReplaceChild("head",CubeListBuilder.create().texOffs(0,0).addBox(-4,-8,-4,8,8,8),PartPose.offset(0,-13,0));
 		head.addOrReplaceChild("hat",CubeListBuilder.create().texOffs(0,16).addBox(-4,-8,-4,8,8,8,new CubeDeformation(-.5f)),PartPose.ZERO);
 		r.addOrReplaceChild("body",CubeListBuilder.create().texOffs(32,16).addBox(-4,0,-2,8,12,4),PartPose.offset(0,-14,0));
-		r.addOrReplaceChild("right_arm",CubeListBuilder.create().texOffs(56,0).addBox(-1,-2,-1,2,30,2),PartPose.offset(-3,-12,0));
+		// The current EndermanModel drives symmetric shoulder parts.  Keeping 1.8's old -3 pivot
+		// leaves this arm two units inside the torso; -5 is the matching shoulder to the left +5.
+		r.addOrReplaceChild("right_arm",CubeListBuilder.create().texOffs(56,0).addBox(-1,-2,-1,2,30,2),PartPose.offset(-5,-12,0));
 		r.addOrReplaceChild("left_arm",CubeListBuilder.create().mirror().texOffs(56,0).addBox(-1,-2,-1,2,30,2),PartPose.offset(5,-12,0));
 		r.addOrReplaceChild("right_leg",CubeListBuilder.create().texOffs(56,0).addBox(-1,0,-1,2,30,2),PartPose.offset(-2,-2,0));
 		r.addOrReplaceChild("left_leg",CubeListBuilder.create().mirror().texOffs(56,0).addBox(-1,0,-1,2,30,2),PartPose.offset(2,-2,0));

@@ -1,10 +1,12 @@
 package dev.oery.legacyresources.client.convert;
 
 import net.minecraft.client.model.geom.PartPose;
+import net.minecraft.client.model.BabyModelTransform;
 import net.minecraft.client.model.geom.builders.CubeListBuilder;
 import net.minecraft.client.model.geom.builders.LayerDefinition;
 import net.minecraft.client.model.geom.builders.MeshDefinition;
 import net.minecraft.client.model.geom.builders.PartDefinition;
+import java.util.Set;
 
 /**
  * The adult wolf geometry from 1.8.9, expressed with the part hierarchy expected by the current
@@ -16,6 +18,20 @@ public final class LegacyWolfModel {
 	private LegacyWolfModel() { }
 
 	public static LayerDefinition createBodyLayer() {
+		return LayerDefinition.create(mesh(), 64, 32);
+	}
+
+	/** The current wolf armour layer drives the adult controller, so it needs the same named classic parts. */
+	public static LayerDefinition createArmorLayer() {
+		return LayerDefinition.create(mesh(), 64, 32);
+	}
+
+	/** 1.8 scaled the classic adult sheet for pups; retain that layout instead of selecting a 32×32 modern sheet. */
+	public static LayerDefinition createBabyLayer() {
+		return LayerDefinition.create(mesh().apply(new BabyModelTransform(false, 5, 2, Set.of("head"))), 64, 32);
+	}
+
+	private static MeshDefinition mesh() {
 		MeshDefinition mesh = new MeshDefinition();
 		PartDefinition root = mesh.getRoot();
 		PartDefinition head = root.addOrReplaceChild("head", CubeListBuilder.create(), PartPose.offset(-1, 13.5f, -7));
@@ -32,6 +48,6 @@ public final class LegacyWolfModel {
 		root.addOrReplaceChild("left_front_leg", leg, PartPose.offset(.5f, 16, -4));
 		PartDefinition tail = root.addOrReplaceChild("tail", CubeListBuilder.create(), PartPose.offsetAndRotation(-1, 12, 8, .62831855f, 0, 0));
 		tail.addOrReplaceChild("real_tail", CubeListBuilder.create().texOffs(9, 18).addBox(-1, 0, -1, 2, 8, 2), PartPose.ZERO);
-		return LayerDefinition.create(mesh, 64, 32);
+		return mesh;
 	}
 }

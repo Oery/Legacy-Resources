@@ -25,6 +25,6 @@ public class ClassicHorseRenderer extends AbstractHorseRenderer<Horse, HorseRend
 	@Override public Identifier getTextureLocation(HorseRenderState state) { return TEXTURES.get(state.variant); }
 	@Override public HorseRenderState createRenderState() { return new HorseRenderState(); }
 	@Override public void extractRenderState(Horse horse, HorseRenderState state, float partial) { super.extractRenderState(horse, state, partial); state.variant=horse.getVariant(); state.markings=horse.getMarkings(); state.bodyArmorItem=horse.getBodyArmorItem().copy(); }
-	@Override protected void scale(HorseRenderState state, PoseStack pose) { if (state.isBaby) { pose.scale(.5f,.5f,.5f); pose.translate(0,1.35f,0); } }
+	@Override protected void scale(HorseRenderState state, PoseStack pose) { LegacyEntityRenderPlan.applyOuter(LegacyEntityRenderPlan.Family.HORSE, state.isBaby, pose); }
 	private static Identifier id(String stem) { return Identifier.withDefaultNamespace("textures/entity/horse/" + stem + ".png"); }
 }

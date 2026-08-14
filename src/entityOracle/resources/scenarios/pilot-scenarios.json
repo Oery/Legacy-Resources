@@ -1,0 +1,66 @@
+[
+  {"schemaVersion":1,"id":"ocelot-adult-idle-neutral","family":"ocelot","baby":false,"growth":1,"limbPhase":0,"limbSpeed":0,"age":0,"headYaw":0,"headPitch":0,"swingProgress":0,"riding":false,"posture":"idle"},
+  {"schemaVersion":1,"id":"ocelot-adult-walk-a","family":"ocelot","baby":false,"growth":1,"limbPhase":0.7,"limbSpeed":0.8,"age":12,"headYaw":20,"headPitch":-15,"swingProgress":0,"riding":false,"posture":"walking"},
+  {"schemaVersion":1,"id":"ocelot-adult-walk-b","family":"ocelot","baby":false,"growth":1,"limbPhase":2.2,"limbSpeed":0.55,"age":31,"headYaw":-25,"headPitch":18,"swingProgress":0.3,"riding":false,"posture":"walking"},
+  {"schemaVersion":1,"id":"ocelot-adult-sneak","family":"ocelot","baby":false,"growth":1,"limbPhase":1.1,"limbSpeed":0.4,"age":7,"headYaw":12,"headPitch":5,"swingProgress":0,"riding":false,"posture":"sneaking"},
+  {"schemaVersion":1,"id":"ocelot-adult-sprint","family":"ocelot","baby":false,"growth":1,"limbPhase":1.7,"limbSpeed":1,"age":19,"headYaw":-12,"headPitch":-8,"swingProgress":0,"riding":false,"posture":"sprinting"},
+  {"schemaVersion":1,"id":"ocelot-adult-sit","family":"ocelot","baby":false,"growth":1,"limbPhase":0,"limbSpeed":0,"age":40,"headYaw":30,"headPitch":12,"swingProgress":0,"riding":false,"posture":"sitting"},
+  {"schemaVersion":1,"id":"ocelot-baby-idle","family":"ocelot","baby":true,"growth":0,"limbPhase":0,"limbSpeed":0,"age":3,"headYaw":0,"headPitch":0,"swingProgress":0,"riding":false,"posture":"idle"},
+  {"schemaVersion":1,"id":"ocelot-baby-walk","family":"ocelot","baby":true,"growth":0.5,"limbPhase":1.3,"limbSpeed":0.7,"age":9,"headYaw":-20,"headPitch":15,"swingProgress":0,"riding":false,"posture":"walking"},
+
+  {"schemaVersion":1,"id":"wolf-adult-idle","family":"wolf","baby":false,"growth":1,"limbPhase":0,"limbSpeed":0,"age":0,"headYaw":0,"headPitch":0,"swingProgress":0,"riding":false,"posture":"idle","angry":false,"wet":false,"shaking":false,"interested":false,"tailAngle":0.7},
+  {"schemaVersion":1,"id":"wolf-adult-walk","family":"wolf","baby":false,"growth":1,"limbPhase":1.2,"limbSpeed":0.8,"age":11,"headYaw":25,"headPitch":-12,"swingProgress":0,"riding":false,"posture":"walking","angry":false,"wet":false,"shaking":false,"interested":false,"tailAngle":0.9},
+  {"schemaVersion":1,"id":"wolf-adult-sit","family":"wolf","baby":false,"growth":1,"limbPhase":0,"limbSpeed":0,"age":27,"headYaw":-20,"headPitch":18,"swingProgress":0,"riding":false,"posture":"sitting","angry":false,"wet":false,"shaking":false,"interested":true,"tailAngle":1.1},
+  {"schemaVersion":1,"id":"wolf-adult-angry","family":"wolf","baby":false,"growth":1,"limbPhase":2.4,"limbSpeed":0.65,"age":16,"headYaw":10,"headPitch":4,"swingProgress":0.4,"riding":false,"posture":"walking","angry":true,"wet":false,"shaking":false,"interested":false,"tailAngle":0},
+  {"schemaVersion":1,"id":"wolf-adult-wet-shake","family":"wolf","baby":false,"growth":1,"limbPhase":0.3,"limbSpeed":0.2,"age":44,"headYaw":-8,"headPitch":9,"swingProgress":0,"riding":false,"posture":"idle","angry":false,"wet":true,"shaking":true,"interested":false,"tailAngle":1.4},
+  {"schemaVersion":1,"id":"wolf-baby-idle","family":"wolf","baby":true,"growth":0,"limbPhase":0,"limbSpeed":0,"age":2,"headYaw":0,"headPitch":0,"swingProgress":0,"riding":false,"posture":"idle","angry":false,"wet":false,"shaking":false,"interested":false,"tailAngle":0.7},
+  {"schemaVersion":1,"id":"wolf-baby-sit","family":"wolf","baby":true,"growth":0.5,"limbPhase":0,"limbSpeed":0,"age":8,"headYaw":20,"headPitch":-10,"swingProgress":0,"riding":false,"posture":"sitting","angry":false,"wet":false,"shaking":false,"interested":true,"tailAngle":1.2},
+
+  {"schemaVersion":1,"id":"horse-adult-control","family":"horse","baby":false,"growth":1,"limbPhase":0,"limbSpeed":0,"age":0,"headYaw":0,"headPitch":0,"swingProgress":0,"riding":false,"type":"horse","eating":0,"rearing":0,"mouthOpen":0,"saddled":false,"ridden":false,"chested":false,"tailMoving":false},
+  {"schemaVersion":1,"id":"donkey-adult-control","family":"horse","baby":false,"growth":1,"limbPhase":0,"limbSpeed":0,"age":5,"headYaw":10,"headPitch":-5,"swingProgress":0,"riding":false,"type":"donkey","eating":0,"rearing":0,"mouthOpen":0,"saddled":false,"ridden":false,"chested":true,"tailMoving":false},
+  {"schemaVersion":1,"id":"mule-adult-control","family":"horse","baby":false,"growth":1,"limbPhase":0,"limbSpeed":0,"age":10,"headYaw":-10,"headPitch":5,"swingProgress":0,"riding":false,"type":"mule","eating":0,"rearing":0,"mouthOpen":0,"saddled":true,"ridden":false,"chested":true,"tailMoving":false},
+  {"schemaVersion":1,"id":"skeleton-adult-control","family":"horse","baby":false,"growth":1,"limbPhase":0,"limbSpeed":0,"age":15,"headYaw":0,"headPitch":0,"swingProgress":0,"riding":false,"type":"skeleton","eating":0,"rearing":0,"mouthOpen":0,"saddled":false,"ridden":false,"chested":false,"tailMoving":false},
+  {"schemaVersion":1,"id":"zombie-adult-control","family":"horse","baby":false,"growth":1,"limbPhase":0,"limbSpeed":0,"age":20,"headYaw":0,"headPitch":0,"swingProgress":0,"riding":false,"type":"zombie","eating":0,"rearing":0,"mouthOpen":0,"saddled":false,"ridden":false,"chested":false,"tailMoving":false},
+  {"schemaVersion":1,"id":"horse-growth-0","family":"horse","baby":true,"growth":0,"limbPhase":0.5,"limbSpeed":0.5,"age":4,"headYaw":15,"headPitch":-8,"swingProgress":0,"riding":false,"type":"horse","eating":0,"rearing":0,"mouthOpen":0,"saddled":false,"ridden":false,"chested":false,"tailMoving":false},
+  {"schemaVersion":1,"id":"horse-growth-025","family":"horse","baby":true,"growth":0.25,"limbPhase":1,"limbSpeed":0.7,"age":9,"headYaw":-15,"headPitch":8,"swingProgress":0,"riding":false,"type":"horse","eating":0.4,"rearing":0,"mouthOpen":0,"saddled":false,"ridden":false,"chested":false,"tailMoving":false},
+  {"schemaVersion":1,"id":"horse-growth-050","family":"horse","baby":true,"growth":0.5,"limbPhase":1.5,"limbSpeed":0.8,"age":14,"headYaw":20,"headPitch":10,"swingProgress":0.2,"riding":false,"type":"donkey","eating":0,"rearing":0.6,"mouthOpen":0,"saddled":true,"ridden":false,"chested":true,"tailMoving":false},
+  {"schemaVersion":1,"id":"horse-growth-075","family":"horse","baby":true,"growth":0.75,"limbPhase":2,"limbSpeed":0.6,"age":19,"headYaw":-20,"headPitch":-10,"swingProgress":0,"riding":true,"type":"mule","eating":0,"rearing":0,"mouthOpen":0.7,"saddled":true,"ridden":true,"chested":true,"tailMoving":true},
+  {"schemaVersion":1,"id":"horse-growth-100","family":"horse","baby":false,"growth":1,"limbPhase":2.5,"limbSpeed":1,"age":24,"headYaw":12,"headPitch":4,"swingProgress":0,"riding":false,"type":"horse","eating":0,"rearing":0,"mouthOpen":0,"saddled":false,"ridden":false,"chested":false,"tailMoving":true},
+  {"schemaVersion":1,"id":"horse-eating","family":"horse","baby":false,"growth":1,"limbPhase":0,"limbSpeed":0,"age":32,"headYaw":5,"headPitch":12,"swingProgress":0,"riding":false,"type":"horse","eating":1,"rearing":0,"mouthOpen":0.4,"saddled":false,"ridden":false,"chested":false,"tailMoving":false},
+  {"schemaVersion":1,"id":"horse-rearing-ridden","family":"horse","baby":false,"growth":1,"limbPhase":1.8,"limbSpeed":0.4,"age":38,"headYaw":-18,"headPitch":7,"swingProgress":0.5,"riding":true,"type":"horse","eating":0,"rearing":1,"mouthOpen":0.2,"saddled":true,"ridden":true,"chested":false,"tailMoving":true},
+
+  {"schemaVersion":1,"id":"cat-adult-idle","family":"cat","baby":false,"growth":1,"limbPhase":0,"limbSpeed":0,"age":2,"headYaw":0,"headPitch":0,"swingProgress":0,"riding":false,"posture":"idle"},
+  {"schemaVersion":1,"id":"cat-adult-sit","family":"cat","baby":false,"growth":1,"limbPhase":0,"limbSpeed":0,"age":17,"headYaw":24,"headPitch":-9,"swingProgress":0,"riding":false,"posture":"sitting"},
+  {"schemaVersion":1,"id":"cat-baby-idle","family":"cat","baby":true,"growth":0,"limbPhase":0,"limbSpeed":0,"age":4,"headYaw":-12,"headPitch":6,"swingProgress":0,"riding":false,"posture":"idle"},
+  {"schemaVersion":1,"id":"cat-baby-walk","family":"cat","baby":true,"growth":0.5,"limbPhase":1.35,"limbSpeed":0.72,"age":13,"headYaw":19,"headPitch":-11,"swingProgress":0,"riding":false,"posture":"walking"},
+
+  {"schemaVersion":1,"id":"dog-adult-idle","family":"dog","baby":false,"growth":1,"limbPhase":0,"limbSpeed":0,"age":3,"headYaw":0,"headPitch":0,"swingProgress":0,"riding":false,"posture":"idle","angry":false,"wet":false,"shaking":false,"interested":false,"tailAngle":0.7},
+  {"schemaVersion":1,"id":"dog-adult-sit-interested","family":"dog","baby":false,"growth":1,"limbPhase":0,"limbSpeed":0,"age":22,"headYaw":-21,"headPitch":13,"swingProgress":0,"riding":false,"posture":"sitting","angry":false,"wet":false,"shaking":false,"interested":true,"tailAngle":1.15},
+  {"schemaVersion":1,"id":"dog-baby-idle","family":"dog","baby":true,"growth":0,"limbPhase":0,"limbSpeed":0,"age":5,"headYaw":10,"headPitch":-5,"swingProgress":0,"riding":false,"posture":"idle","angry":false,"wet":false,"shaking":false,"interested":false,"tailAngle":0.8},
+  {"schemaVersion":1,"id":"dog-baby-walk","family":"dog","baby":true,"growth":0.5,"limbPhase":1.6,"limbSpeed":0.75,"age":14,"headYaw":-17,"headPitch":8,"swingProgress":0,"riding":false,"posture":"walking","angry":false,"wet":true,"shaking":true,"interested":false,"tailAngle":1.25},
+
+  {"schemaVersion":1,"id":"chicken-adult-idle","family":"chicken","baby":false,"growth":1,"limbPhase":0,"limbSpeed":0,"age":1,"headYaw":0,"headPitch":0,"swingProgress":0,"riding":false,"flap":0,"flapSpeed":0},
+  {"schemaVersion":1,"id":"chicken-adult-walk-flap","family":"chicken","baby":false,"growth":1,"limbPhase":1.1,"limbSpeed":0.8,"age":16,"headYaw":22,"headPitch":-10,"swingProgress":0,"riding":false,"flap":1.2,"flapSpeed":0.65},
+  {"schemaVersion":1,"id":"chicken-baby-idle","family":"chicken","baby":true,"growth":0,"limbPhase":0,"limbSpeed":0,"age":3,"headYaw":-9,"headPitch":5,"swingProgress":0,"riding":false,"flap":0,"flapSpeed":0},
+  {"schemaVersion":1,"id":"chicken-baby-walk-flap","family":"chicken","baby":true,"growth":0.5,"limbPhase":2.05,"limbSpeed":0.7,"age":12,"headYaw":16,"headPitch":8,"swingProgress":0,"riding":false,"flap":2.3,"flapSpeed":0.9},
+
+  {"schemaVersion":1,"id":"pig-adult-idle","family":"pig","baby":false,"growth":1,"limbPhase":0,"limbSpeed":0,"age":2,"headYaw":0,"headPitch":0,"swingProgress":0,"riding":false,"saddled":false},
+  {"schemaVersion":1,"id":"pig-adult-walk-saddled","family":"pig","baby":false,"growth":1,"limbPhase":1.45,"limbSpeed":0.85,"age":18,"headYaw":23,"headPitch":-12,"swingProgress":0,"riding":false,"saddled":true},
+  {"schemaVersion":1,"id":"pig-baby-idle","family":"pig","baby":true,"growth":0,"limbPhase":0,"limbSpeed":0,"age":4,"headYaw":-11,"headPitch":5,"swingProgress":0,"riding":false,"saddled":false},
+  {"schemaVersion":1,"id":"pig-baby-walk-saddled","family":"pig","baby":true,"growth":0.5,"limbPhase":2.1,"limbSpeed":0.7,"age":15,"headYaw":17,"headPitch":9,"swingProgress":0,"riding":false,"saddled":true},
+
+  {"schemaVersion":1,"id":"cow-adult-idle","family":"cow","baby":false,"growth":1,"limbPhase":0,"limbSpeed":0,"age":2,"headYaw":0,"headPitch":0,"swingProgress":0,"riding":false},
+  {"schemaVersion":1,"id":"cow-adult-walk","family":"cow","baby":false,"growth":1,"limbPhase":1.25,"limbSpeed":0.8,"age":19,"headYaw":-24,"headPitch":11,"swingProgress":0,"riding":false},
+  {"schemaVersion":1,"id":"cow-baby-idle","family":"cow","baby":true,"growth":0,"limbPhase":0,"limbSpeed":0,"age":5,"headYaw":12,"headPitch":-6,"swingProgress":0,"riding":false},
+  {"schemaVersion":1,"id":"cow-baby-walk","family":"cow","baby":true,"growth":0.5,"limbPhase":2.2,"limbSpeed":0.68,"age":14,"headYaw":-18,"headPitch":9,"swingProgress":0,"riding":false},
+
+  {"schemaVersion":1,"id":"rabbit-adult-idle","family":"rabbit","baby":false,"growth":1,"limbPhase":0,"limbSpeed":0,"age":2,"headYaw":0,"headPitch":0,"swingProgress":0,"riding":false,"jump":0},
+  {"schemaVersion":1,"id":"rabbit-adult-jump","family":"rabbit","baby":false,"growth":1,"limbPhase":0.8,"limbSpeed":0.5,"age":13,"headYaw":21,"headPitch":-8,"swingProgress":0,"riding":false,"jump":0.5},
+  {"schemaVersion":1,"id":"rabbit-baby-idle","family":"rabbit","baby":true,"growth":0,"limbPhase":0,"limbSpeed":0,"age":4,"headYaw":-10,"headPitch":6,"swingProgress":0,"riding":false,"jump":0},
+  {"schemaVersion":1,"id":"rabbit-baby-jump","family":"rabbit","baby":true,"growth":0.5,"limbPhase":1.3,"limbSpeed":0.6,"age":11,"headYaw":16,"headPitch":10,"swingProgress":0,"riding":false,"jump":0.75},
+
+  {"schemaVersion":1,"id":"bat-flying-neutral","family":"bat","baby":false,"growth":1,"limbPhase":0,"limbSpeed":0,"age":0,"headYaw":0,"headPitch":0,"swingProgress":0,"riding":false,"resting":false},
+  {"schemaVersion":1,"id":"bat-flying-turn","family":"bat","baby":false,"growth":1,"limbPhase":0,"limbSpeed":0,"age":13.25,"headYaw":28,"headPitch":-17,"swingProgress":0,"riding":false,"resting":false},
+  {"schemaVersion":1,"id":"bat-resting-neutral","family":"bat","baby":false,"growth":1,"limbPhase":0,"limbSpeed":0,"age":4,"headYaw":0,"headPitch":0,"swingProgress":0,"riding":false,"resting":true},
+  {"schemaVersion":1,"id":"bat-resting-look","family":"bat","baby":false,"growth":1,"limbPhase":0,"limbSpeed":0,"age":29,"headYaw":-31,"headPitch":19,"swingProgress":0,"riding":false,"resting":true}
+]

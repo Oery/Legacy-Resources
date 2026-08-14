@@ -1,5 +1,6 @@
 package dev.oery.legacyresources.client.derive;
 
+import java.awt.image.BufferedImage;
 import java.util.List;
 
 /**
@@ -28,10 +29,19 @@ final class Concrete extends ConcreteBlock {
 		return "_concrete";
 	}
 
+	@Override
+	protected BufferedImage source(BufferedImage sand, Params params) {
+		int scale = Ops.scaleOf(sand);
+		return scale == 0 ? sand : Ops.boxBlur(sand, params.getInt("blur_radius") * scale);
+	}
+
 	/** Tuned in the lab across the pack corpus; see {@link ConcreteBlock#params} for what each does. */
 	@Override
 	public List<Param> params() {
 		return List.of(
+			// Smooth the sand once before painting it. This keeps a pack's broad grain but gives hardened
+			// concrete a different field from powder, rather than two palette swaps of the same tile.
+			Param.ofInt("blur_radius", 0, 3, 1),
 			// 1 is vanilla's near-flat fill; above that is the pack's own grain showing through. See the
 			// class note - this is the one constant here set by eye rather than by measurement.
 			Param.of("spread_scale", 0, 6, 2.5),

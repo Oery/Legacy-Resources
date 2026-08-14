@@ -1,6 +1,7 @@
 package dev.oery.legacyresources.client.entity;
 
 import com.mojang.blaze3d.vertex.PoseStack;
+import dev.oery.legacyresources.client.convert.LegacyChickenModel;
 import dev.oery.legacyresources.client.convert.LegacyPackResources;
 import java.util.Set;
 import net.minecraft.client.model.BabyModelTransform;
@@ -27,9 +28,9 @@ final class HybridChickenRenderer extends MobRenderer<Chicken, ChickenRenderStat
 	private final ChickenModel babyModel;
 
 	HybridChickenRenderer(EntityRendererProvider.Context context) {
-		super(context, new AdultChickenModel(AdultChickenModel.createBodyLayer().bakeRoot()), .3f);
+		super(context, new LegacyChickenModel(AdultChickenModel.createBodyLayer().bakeRoot()), .3f);
 		adultModel = model;
-		babyModel = new AdultChickenModel(AdultChickenModel.createBodyLayer().apply(new BabyModelTransform(false, 5, 2, Set.of("head"))).bakeRoot());
+		babyModel = new LegacyChickenModel(AdultChickenModel.createBodyLayer().apply(new BabyModelTransform(false, 5, 2, Set.of("head"))).bakeRoot());
 		resources = context.getResourceManager();
 		modern = new ChickenRenderer(context);
 	}

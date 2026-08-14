@@ -1,6 +1,6 @@
 # Vanilla model-alias derivation exceptions
 
-Generated from `reference/1.8.9` and `reference/26.2` by `./gradlew generateModelNameMaps`. These entries are deliberately excluded from `block_models.json`: they need a dedicated conversion or an explicit reviewed alias.
+Generated from `reference/1.8.9` and `reference/26.2` by `./gradlew -PmodelMap.report generateModelNameMaps`. These entries are deliberately excluded from `block_models.json`: they need a dedicated conversion or an explicit reviewed alias.
 
 ## Legacy blockstates with no modern blockstate file
 
@@ -66,23 +66,6 @@ Generated from `reference/1.8.9` and `reference/26.2` by `./gradlew generateMode
 ## Modern model names with conflicting legacy sources
 
 - `anvil` ← [`anvil_undamaged`, `anvil_very_damaged`, `anvil_slightly_damaged`]
-- `bedrock` ← [`bedrock_mirrored`, `bedrock`]
-- `bedrock_mirrored` ← [`bedrock_mirrored`, `bedrock`]
 - `cauldron` ← [`cauldron_empty`, `cauldron_level3`, `cauldron_level2`, `cauldron_level1`]
-- `potted_cactus` ← [`flower_pot_dead_bush`, `flower_pot_dandelion`, `flower_pot_acacia`, `flower_pot_tulip_pink`, `flower_pot_tulip_orange`, `flower_pot_mushroom_red`, `flower_pot_birch`, `flower_pot_mushroom_brown`, `flower_pot_allium`, `flower_pot_orchid`, `flower_pot_daisy`, `flower_pot_houstonia`, `flower_pot_tulip_red`, `flower_pot_fern`, `flower_pot_oak`, `flower_pot_tulip_white`, `flower_pot_jungle`, `flower_pot_dark_oak`, `flower_pot`, `flower_pot_rose`, `flower_pot_cactus`, `flower_pot_spruce`]
-- `redstone_ore` ← [`redstone_ore`, `lit_redstone_ore`]
-- `sponge` ← [`sponge`, `sponge_wet`]
-- `stone` ← [`stone_mirrored`, `stone`]
-- `stone_mirrored` ← [`stone_mirrored`, `stone`]
-- `tripwire_attached_n` ← [`tripwire_attached_n`, `tripwire_attached_suspended_n`]
-- `tripwire_attached_ne` ← [`tripwire_attached_ne`, `tripwire_attached_suspended_ne`]
-- `tripwire_attached_ns` ← [`tripwire_attached_ns`, `tripwire_attached_suspended_ns`]
-- `tripwire_attached_nse` ← [`tripwire_attached_nse`, `tripwire_attached_suspended_nse`]
-- `tripwire_attached_nsew` ← [`tripwire_attached_suspended_nsew`, `tripwire_attached_nsew`]
-- `tripwire_hook_attached` ← [`tripwire_hook_attached_suspended`, `tripwire_hook_attached`]
+- `potted_cactus` ← [`flower_pot_tulip_pink`, `flower_pot_tulip_orange`, `flower_pot_mushroom_red`, `flower_pot_birch`, `flower_pot_mushroom_brown`, `flower_pot_allium`, `flower_pot_orchid`, `flower_pot_daisy`, `flower_pot_houstonia`, `flower_pot_tulip_red`, `flower_pot_fern`, `flower_pot_oak`, `flower_pot_tulip_white`, `flower_pot_jungle`, `flower_pot_dark_oak`, `flower_pot`, `flower_pot_rose`, `flower_pot_cactus`, `flower_pot_spruce`, `flower_pot_dead_bush`, `flower_pot_dandelion`, `flower_pot_acacia`]
 - `tripwire_hook_attached_on` ← [`tripwire_hook_attached_suspended_powered`, `tripwire_hook_attached_powered`]
-- `tripwire_n` ← [`tripwire_suspended_n`, `tripwire_n`]
-- `tripwire_ne` ← [`tripwire_suspended_ne`, `tripwire_ne`]
-- `tripwire_ns` ← [`tripwire_suspended_ns`, `tripwire_ns`]
-- `tripwire_nse` ← [`tripwire_suspended_nse`, `tripwire_nse`]
-- `tripwire_nsew` ← [`tripwire_suspended_nsew`, `tripwire_nsew`]

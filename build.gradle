@@ -41,10 +41,165 @@ dependencies {
 // reach the published mod. It does sit on the client source set's classpath, because it drives the
 // real LegacyPackResources conversion rather than a reimplementation of it.
 sourceSets {
-	lab {
-		compileClasspath += sourceSets.client.compileClasspath + sourceSets.client.output + sourceSets.main.output
-		runtimeClasspath += sourceSets.client.runtimeClasspath + sourceSets.client.output + sourceSets.main.output
+	// Version-neutral contracts and comparison code. Kept Java 8 compatible so the
+	// separate legacy process and the current-game lab use byte-identical schemas.
+	entityOracle {
+		compileClasspath += sourceSets.client.compileClasspath
+		runtimeClasspath += sourceSets.client.runtimeClasspath
 	}
+	// Instrumentation and the 1.8.9 runner. This is deliberately not part of the
+	// Loom mod or any publication.
+	legacyOracle {
+		compileClasspath += sourceSets.entityOracle.output + sourceSets.entityOracle.compileClasspath
+		runtimeClasspath += sourceSets.entityOracle.output + sourceSets.entityOracle.runtimeClasspath
+	}
+	lab {
+		compileClasspath += sourceSets.client.compileClasspath + sourceSets.client.output + sourceSets.main.output + sourceSets.entityOracle.output
+		runtimeClasspath += sourceSets.client.runtimeClasspath + sourceSets.client.output + sourceSets.main.output + sourceSets.entityOracle.output
+	}
+}
+
+configurations {
+	legacyOracleImplementation.extendsFrom entityOracleImplementation
+}
+
+dependencies {
+	// Used only by the development oracle agent. It is never included in the mod.
+	legacyOracleImplementation 'org.ow2.asm:asm:9.10.1'
+	legacyOracleImplementation 'org.ow2.asm:asm-tree:9.10.1'
+}
+
+def legacyVersionDir = providers.provider {
+	new File(System.getProperty('user.home'), '.minecraft/versions/1.8.9')
+}
+def legacyClientJar = legacyVersionDir.map { new File(it, '1.8.9.jar') }
+def legacyVersionJson = legacyVersionDir.map { new File(it, '1.8.9.json') }
+def legacyOutputDir = layout.buildDirectory.dir('legacy-entity-oracle/1.8.9')
+
+def locateLegacyJava8 = {
+	if (project.hasProperty('legacyOracle.java8')) return file(project.property('legacyOracle.java8'))
+	def runtime = new File(System.getProperty('user.home'), '.minecraft/runtime/jre-legacy')
+	def candidates = [new File(runtime, 'bin/java'), new File(runtime, 'linux/bin/java'), new File(runtime, 'linux/jre-legacy/bin/java')]
+	def found = candidates.find { it.isFile() && it.canExecute() }
+	if (found == null) throw new GradleException("Minecraft Java 8 was not found under ${runtime}. Install 1.8.9 with the official launcher or pass -PlegacyOracle.java8=/path/to/java. Nothing will be downloaded.")
+	return found
+}
+
+def readLegacyInstall = {
+	def jar = legacyClientJar.get()
+	def json = legacyVersionJson.get()
+	def missing = [jar, json].findAll { !it.isFile() }
+	if (!missing.empty) throw new GradleException('Missing official launcher files:\n  ' + missing.join('\n  ') + '\nLaunch Minecraft 1.8.9 once. This project never downloads Minecraft files.')
+	def metadata = new groovy.json.JsonSlurper().parse(json)
+	def expected = metadata.downloads?.client?.sha1
+	if (!(expected instanceof String)) throw new GradleException("${json} has no downloads.client.sha1; refusing an unverifiable client")
+	def digest = java.security.MessageDigest.getInstance('SHA-1').digest(jar.bytes).encodeHex().toString()
+	if (digest != expected) throw new GradleException("Refusing modified or unknown 1.8.9 client ${jar}: expected SHA-1 ${expected}, found ${digest}")
+	def librariesRoot = new File(System.getProperty('user.home'), '.minecraft/libraries')
+	def ruleAllowsLinux = { lib ->
+		if (!lib.rules) return true
+		def allowed = false
+		lib.rules.each { rule ->
+			def applies = !rule.os || rule.os.name == 'linux'
+			if (applies) allowed = rule.action == 'allow'
+		}
+		allowed
+	}
+	def libraryEntries = metadata.libraries.findAll { ruleAllowsLinux(it) && it.downloads?.artifact }
+	def libraries = libraryEntries.collect { lib ->
+		def artifact = lib.downloads?.artifact
+		def path = artifact?.path
+		if (path == null) {
+			def bits = lib.name.split(':')
+			path = bits[0].replace('.', '/') + '/' + bits[1] + '/' + bits[2] + '/' + bits[1] + '-' + bits[2] + '.jar'
+		}
+		new File(librariesRoot, path)
+	}
+	def absent = libraries.findAll { !it.isFile() }
+	if (!absent.empty) throw new GradleException('Missing launcher libraries (nothing was downloaded):\n  ' + absent.join('\n  '))
+	libraryEntries.eachWithIndex { lib, index ->
+		def expectedLibraryHash = lib.downloads.artifact.sha1
+		if (expectedLibraryHash) {
+			def actualLibraryHash = java.security.MessageDigest.getInstance('SHA-1').digest(libraries[index].bytes).encodeHex().toString()
+			if (actualLibraryHash != expectedLibraryHash) throw new GradleException("Refusing modified launcher library ${libraries[index]}: expected SHA-1 ${expectedLibraryHash}, found ${actualLibraryHash}")
+		}
+	}
+	[jar: jar, json: json, sha1: digest, libraries: libraries]
+}
+
+tasks.named('compileEntityOracleJava', JavaCompile) { options.release = 8 }
+tasks.named('compileLegacyOracleJava', JavaCompile) { options.release = 8 }
+
+tasks.register('legacyOracleAgentJar', Jar) {
+	dependsOn tasks.named('legacyOracleClasses')
+	archiveClassifier = 'legacy-oracle-agent'
+	from sourceSets.legacyOracle.output
+	from sourceSets.entityOracle.output
+	manifest {
+		attributes('Premain-Class': 'dev.oery.legacyresources.oracle.legacy.LegacyOracleAgent',
+			'Can-Redefine-Classes': 'false', 'Can-Retransform-Classes': 'false')
+	}
+}
+
+tasks.register('captureLegacyEntityOracle') {
+	group = 'legacy-resources'
+	description = 'Captures local geometry from the verified official Minecraft 1.8.9 client (never downloads files)'
+	dependsOn tasks.named('legacyOracleAgentJar')
+	doLast {
+		def install = readLegacyInstall()
+		def java8 = locateLegacyJava8()
+		def agent = tasks.named('legacyOracleAgentJar', Jar).get().archiveFile.get().asFile
+		def cp = ([agent, install.jar] + install.libraries + configurations.legacyOracleRuntimeClasspath.files).unique().join(File.pathSeparator)
+		def args = [java8.absolutePath, "-javaagent:${agent.absolutePath}", '-cp', cp,
+			'dev.oery.legacyresources.oracle.legacy.LegacyOracleMain',
+			'--client', install.jar.absolutePath, '--version-json', install.json.absolutePath,
+			'--sha1', install.sha1, '--output', legacyOutputDir.get().asFile.absolutePath,
+			'--scenarios', file('src/entityOracle/resources/scenarios').absolutePath]
+		if (project.hasProperty('legacyEntity')) args += ['--entity', project.property('legacyEntity').toString()]
+		if (project.hasProperty('legacyScenario')) args += ['--scenario', project.property('legacyScenario').toString()]
+		def execution = providers.exec { commandLine args; ignoreExitValue = true }
+		def stdout = execution.standardOutput.asText.get()
+		def stderr = execution.standardError.asText.get()
+		if (stdout) logger.lifecycle(stdout.trim())
+		if (stderr) logger.error(stderr.trim())
+		execution.result.get().assertNormalExitValue()
+	}
+}
+
+tasks.register('verifyLegacyEntityOracleHarness', JavaExec) {
+	group = 'verification'
+	description = 'Runs deterministic synthetic trace/comparator mutation tests without Minecraft data'
+	dependsOn tasks.named('entityOracleClasses')
+	classpath = sourceSets.entityOracle.runtimeClasspath
+	mainClass = 'dev.oery.legacyresources.oracle.SyntheticHarness'
+}
+
+tasks.register('compareLegacyEntityModels', JavaExec) {
+	group = 'verification'
+	description = 'Compares current production models with cached local 1.8.9 captures; never regenerates snapshots'
+	dependsOn tasks.named('labClasses')
+	classpath = sourceSets.lab.runtimeClasspath
+	mainClass = 'dev.oery.legacyresources.lab.entityoracle.ModernOracleMain'
+	systemProperty 'legacyOracle.project', projectDir.absolutePath
+	if (project.hasProperty('legacyEntity')) args '--entity', project.property('legacyEntity')
+	if (project.hasProperty('legacyScenario')) args '--scenario', project.property('legacyScenario')
+}
+
+tasks.register('verifyLegacyEntityModels') {
+	group = 'verification'
+	description = 'Strictly compares every cached entity scenario (kept outside check while pilot mismatches remain)'
+	dependsOn tasks.named('compareLegacyEntityModels')
+}
+
+tasks.register('explainLegacyEntityFailure', JavaExec) {
+	group = 'verification'
+	description = 'Prints the worst cached entity-model mismatch and its complete scenario inputs'
+	dependsOn tasks.named('labClasses')
+	classpath = sourceSets.lab.runtimeClasspath
+	mainClass = 'dev.oery.legacyresources.lab.entityoracle.ExplainFailureMain'
+	systemProperty 'legacyOracle.project', projectDir.absolutePath
+	if (project.hasProperty('legacyEntity')) args '--entity', project.property('legacyEntity')
+	if (project.hasProperty('legacyScenario')) args '--scenario', project.property('legacyScenario')
 }
 
 tasks.register('runLab', JavaExec) {
@@ -70,6 +225,9 @@ tasks.register('generateModelNameMaps', JavaExec) {
 	classpath = sourceSets.lab.runtimeClasspath
 	mainClass = 'dev.oery.legacyresources.lab.ModelNameMapGenerator'
 	systemProperty 'lab.project', projectDir.absolutePath
+	if (project.hasProperty('modelMap.report')) {
+		args '--report'
+	}
 }
 
 tasks.register('verifyModelNameMaps', JavaExec) {
@@ -91,10 +249,6 @@ tasks.register('verifyEntityCompatibility', JavaExec) {
 		systemProperty 'lab.packs', project.property('lab.packs')
 	}
 }
-
-processResources {
-	def version = project.version
-	inputs.property "version", version
 
 tasks.register('verifyChestCompatibility', JavaExec) {
 	group = 'verification'
@@ -147,7 +301,7 @@ processResources {
 }
 
 tasks.withType(JavaCompile).configureEach {
-	it.options.release = 25
+	if (it.name != 'compileEntityOracleJava' && it.name != 'compileLegacyOracleJava') it.options.release = 25
 }
 
 java {

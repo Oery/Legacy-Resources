@@ -4,6 +4,7 @@ import dev.oery.legacyresources.client.convert.LegacyCowModel;
 import dev.oery.legacyresources.client.convert.LegacyEndermanModel;
 import dev.oery.legacyresources.client.convert.LegacyPackResources;
 import dev.oery.legacyresources.client.convert.LegacyWolfModel;
+import dev.oery.legacyresources.client.convert.LegacyMagmaCubeModel;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.geom.EntityModelSet;
 import net.minecraft.client.model.geom.ModelLayerLocation;
@@ -27,6 +28,7 @@ public class EntityModelSetMixin {
 	private static final Identifier CLASSIC_COW_TEXTURE = Identifier.withDefaultNamespace("textures/entity/cow/cow_temperate.png");
 	private static final Identifier CLASSIC_MOOSHROOM_TEXTURE = Identifier.withDefaultNamespace("textures/entity/cow/mooshroom_red.png");
 	private static final Identifier CLASSIC_ENDERMAN_TEXTURE = Identifier.withDefaultNamespace("textures/entity/enderman/enderman.png");
+	private static final Identifier CLASSIC_MAGMA_CUBE_TEXTURE = Identifier.withDefaultNamespace("textures/entity/slime/magmacube.png");
 	private static final Identifier[] CLASSIC_WOLF_TEXTURES = {
 		Identifier.withDefaultNamespace("textures/entity/wolf/wolf.png"),
 		Identifier.withDefaultNamespace("textures/entity/wolf/wolf_tame.png"),
@@ -57,7 +59,12 @@ public class EntityModelSetMixin {
 			return;
 		}
 		if (id.equals(ModelLayers.ENDERMAN) && legacyresources$isLegacySourced(client, CLASSIC_ENDERMAN_TEXTURE)) cir.setReturnValue(LegacyEndermanModel.createBodyLayer().bakeRoot());
-		if (id.equals(ModelLayers.WOLF) && legacyresources$hasLegacySource(client, CLASSIC_WOLF_TEXTURES)) cir.setReturnValue(LegacyWolfModel.createBodyLayer().bakeRoot());
+		if (id.equals(ModelLayers.MAGMA_CUBE) && legacyresources$isLegacySourced(client, CLASSIC_MAGMA_CUBE_TEXTURE)) cir.setReturnValue(LegacyMagmaCubeModel.createBodyLayer().bakeRoot());
+		if (legacyresources$hasLegacySource(client, CLASSIC_WOLF_TEXTURES)) {
+			if (id.equals(ModelLayers.WOLF)) cir.setReturnValue(LegacyWolfModel.createBodyLayer().bakeRoot());
+			if (id.equals(ModelLayers.WOLF_BABY)) cir.setReturnValue(LegacyWolfModel.createBabyLayer().bakeRoot());
+			if (id.equals(ModelLayers.WOLF_ARMOR)) cir.setReturnValue(LegacyWolfModel.createArmorLayer().bakeRoot());
+		}
 	}
 
 	private static boolean legacyresources$isLegacySourced(Minecraft client, Identifier texture) {

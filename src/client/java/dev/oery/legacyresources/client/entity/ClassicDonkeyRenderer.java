@@ -16,5 +16,5 @@ final class ClassicDonkeyRenderer<T extends AbstractChestedHorse> extends Abstra
 	@Override public Identifier getTextureLocation(DonkeyRenderState state) { return texture; }
 	@Override public DonkeyRenderState createRenderState() { return new DonkeyRenderState(); }
 	@Override public void extractRenderState(T horse, DonkeyRenderState state, float partial) { super.extractRenderState(horse,state,partial); state.hasChest=horse.hasChest(); }
-	@Override protected void scale(DonkeyRenderState state, PoseStack pose) { if(state.isBaby){pose.scale(.5f,.5f,.5f);pose.translate(0,1.35f,0);} }
+	@Override protected void scale(DonkeyRenderState state, PoseStack pose) { LegacyEntityRenderPlan.applyOuter(LegacyEntityRenderPlan.Family.HORSE, state.isBaby, pose); }
 }

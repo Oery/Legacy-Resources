@@ -34,7 +34,7 @@ public final class LegacyCowModel {
 				.texOffs(18, 4).addBox(-6.0f, -10.0f, -7.0f, 12.0f, 18.0f, 10.0f)
 				.texOffs(52, 0).addBox(-2.0f, 2.0f, -8.0f, 4.0f, 6.0f, 1.0f),
 			PartPose.offsetAndRotation(0.0f, 5.0f, 2.0f, 1.5707964f, 0.0f, 0.0f));
-		CubeListBuilder leftLeg = CubeListBuilder.create().mirror().texOffs(0, 16).addBox(-2.0f, 0.0f, -2.0f, 4.0f, 12.0f, 4.0f);
+		CubeListBuilder leftLeg = CubeListBuilder.create().texOffs(0, 16).addBox(-2.0f, 0.0f, -2.0f, 4.0f, 12.0f, 4.0f);
 		CubeListBuilder rightLeg = CubeListBuilder.create().texOffs(0, 16).addBox(-2.0f, 0.0f, -2.0f, 4.0f, 12.0f, 4.0f);
 		root.addOrReplaceChild("right_hind_leg", rightLeg, PartPose.offset(-4.0f, 12.0f, 7.0f));
 		root.addOrReplaceChild("left_hind_leg", leftLeg, PartPose.offset(4.0f, 12.0f, 7.0f));

@@ -15,5 +15,5 @@ final class ClassicUndeadHorseRenderer<T extends AbstractHorse> extends Abstract
 	}
 	@Override public Identifier getTextureLocation(EquineRenderState state) { return texture; }
 	@Override public EquineRenderState createRenderState() { return new EquineRenderState(); }
-	@Override protected void scale(EquineRenderState state, PoseStack pose) { if(state.isBaby){pose.scale(.5f,.5f,.5f);pose.translate(0,1.35f,0);} }
+	@Override protected void scale(EquineRenderState state, PoseStack pose) { LegacyEntityRenderPlan.applyOuter(LegacyEntityRenderPlan.Family.HORSE, state.isBaby, pose); }
 }

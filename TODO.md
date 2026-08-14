@@ -76,7 +76,9 @@ that fails silently - an unannounced sprite renders as vanilla's art with nothin
       covers sword/pickaxe/axe/shovel/hoe. Both share `RampRecolor` with the copper sets.
       Still to do: ingot, scrap, horse armour (needs the equipment translation extended to
       `horse_body`), and the smithing template (no legacy equivalent to derive from).
-- [ ] Suspicious Stew: can be derived from soup
+- [x] Suspicious Stew: derived from the pack's mushroom stew. Vanilla keeps the same bowl silhouette;
+      its extra cue is new art with no legacy relative, so preserving the pack's own soup is preferable
+      to placing a few foreign vanilla pixels on top of it.
 - [x] Colored Beds: can be derived from the og red bed
       — `Beds`: all sixteen dyes plus the shared `bed_head_north` and `bed_down`, 114 textures from the
       six legacy bed files and the pack's oak planks. Two halves. The geometry is exact — both eras read
@@ -190,12 +192,17 @@ that fails silently - an unannounced sprite renders as vanilla's art with nothin
       flat to within a deviation of 1, so reproducing it exactly would be sixteen fills in vanilla's
       own colours — a derivation that derives nothing. Above 1 the pack's grain shows through, which
       is the whole point of deriving it. Both want an in-game look.
-- [ ] Iron Nuggets / Copper Nuggets: can be derived from gold nuggets
-- [ ] Breeze Rods: can be derived from Blaze Rods
-- [ ] Recovery Compass: can be derived from Compass
-- [ ] Soul fire / soul torch: can be derived from fire / torch
-- [ ] Pillagers: can probably be derived from villagers
-- [ ] Trap doors: from their respective wood (very experimental)
+- [x] Iron Nuggets / Copper Nuggets: derived from gold nuggets with separate silver and copper ramps.
+- [x] Breeze Rods: derived from Blaze Rods on a cool, desaturated wind-colour ramp.
+- [x] Recovery Compass: derived from all 32 converted compass frames. The shared dial remains the
+      pack's art; per-coordinate frame voting isolates the moving needle and recolours it cyan.
+- [x] Soul fire / soul torch: derived from fire / torch.
+- [x] Pillagers: derived from the generic villager skin on the compatible 64×64 biped canvas.
+      Illager-only uniform/crossbow details have no legacy source; a pack's own modern pillager file
+      still takes precedence.
+- [x] Wood trapdoors: the legacy oak-trapdoor joinery is painted on each wood's own plank band.
+      Covers spruce, birch, jungle, acacia, dark oak, mangrove, cherry, crimson, warped and pale oak;
+      bamboo remains vanilla because legacy has neither compatible bamboo art nor a derived plank source.
 - [x] White Dye: should be derived from another dye (magenta for example)
       — `WhiteDye` from the pack's magenta, and with it `BlackDye`, `BlueDye` and `BrownDye`, which had
       the same defect: 1.8.9 had no separate item for any of these four, so `dye_powder_white` *is*
@@ -245,7 +252,10 @@ that fails silently - an unannounced sprite renders as vanilla's art with nothin
 - [x] Honey Blocks: from slime blocks — `HoneyBlock` repaints the pack's slime mottle into the three
       vanilla honey face bands, preserving its relative transparency. Serves all three faces or none;
       standalone validation found 60 usable slime textures in the 83-pack zip corpus.
-- [ ] Frosted Ice: from packed ice or regular ice
+- [x] Powder Snow: derived from the pack's snow texture on a slightly blue-white powder-snow band, so
+      cauldrons and blocks retain the pack's grain instead of falling back to vanilla.
+- [x] Frosted Ice: derived from packed ice, or regular ice where that is all the pack supplies. The
+      four crack stages retain the source pattern; their crack overlay has no legacy counterpart.
 
 # Not Working
 
@@ -283,7 +293,9 @@ that fails silently - an unannounced sprite renders as vanilla's art with nothin
       at all — 1.8.9 had exactly one wooden trapdoor. Pointing them all at the pack's single `trapdoor`
       would make the inverse map ambiguous and give a birch trapdoor oak art, so it is a judgement call
       rather than a fix; deriving them from the pack's own planks is the better answer.
-- [ ] Clouds — **needs reworking, the in-game result is bad**
+- [x] Clouds — non-256px legacy sheets now decline to vanilla clouds. Modern turns every source pixel
+      into fixed cloud geometry, so an HD sheet renders at the wrong world scale and no thresholding
+      strategy preserved painterly packs; the compatible 256×256 sheets still pass through unchanged.
       The scale half below is settled and correct; the *appearance* is not, and a second attempt
       should probably start by questioning whether a per-cell binary mask can represent these sheets
       at all. What has been tried and rejected, so it is not tried again:
@@ -480,20 +492,62 @@ that fails silently - an unannounced sprite renders as vanilla's art with nothin
       — dropped. 1.8.9 has no crossbow, and 26.2's item texture is `crossbow_standby` with no plain
       `crossbow.png`, so the entry pointed a name modern never asks for at a file no legacy pack has.
       Dead in both directions before and after: 0 packs of 70 serve or announce either name.
-- [ ] Torch in first hand has bad orientation (bdcraft)
-- [ ] doors in the inventory has bad orientation (bd craft model)
-- [ ] doors have 3d model when held but not when placed (bd craft)
-- [ ] Cauldron with snow inside shows vanilla texture
-- [ ] Trapdoor custom model on bdcraft doesnt look right
-- [ ] cocoa bean has a bad uv mapping (at least on bdcraft)
+- [ ] In-hand legacy block models: explicit legacy first-/third-person transforms need a measured
+      conversion to modern hand contexts. The attempted global Euler conversion was not visually
+      compatible and has been removed; models currently receive safe modern defaults while retaining
+      their legacy source transforms for the eventual measured conversion.
+- [x] doors have 3d model when held but not when placed (bd craft)
+- [x] Cauldron with snow inside uses the derived powder-snow sprite, so it retains the pack's snow
+      grain rather than falling back to vanilla.
+- [x] Trapdoor custom model on bdcraft doesnt look right
+- [x] cocoa bean has a bad uv mapping (at least on bdcraft)
 - [x] Command block textures: 1.8.9's single `command_block` texture is now mapped and announced for
       all regular, chain, repeating, and conditional command-block faces.
-- [ ] Derive subtype-specific command block textures from the legacy command block: chain, repeating,
-      and conditional command blocks currently share the original block's art, but could gain
-      pack-consistent face details rather than using a direct compatibility mapping.
-- [ ] beds model dont work correctly (bdcraft)
-- [ ] the concrete derived from concrete powder looks too similar to the powder (bdcraft)
+- [x] Derive subtype-specific command block textures from the legacy command block. Its animated
+      mechanical pattern is retained while regular, chain, and repeating families receive their
+      modern orange, teal, and violet material bands; the new face glyphs have no legacy source.
+- [x] beds model dont work correctly (bdcraft)
+- [x] Concrete and powder no longer use the exact same sand field: hardened concrete blurs the
+      pack's sand by one source pixel before recolouring, retaining broad pack grain while reading as
+      a smoother material alongside granular powder (including BDcraft).
+- [x] Rabbit and rabbit baby use a 1.8-compatible 64×32 model and old texture names whenever the
+      selected variant comes from a legacy pack; other packs retain the modern renderer.
+- [x] Dropped items with custom models inherit the modern block ground transform (0.25 scale) when
+      their legacy model omits that display context (including BDcraft grass).
+- [x] Trapdoor derivations reuse the legacy wooden trapdoor's custom geometry when present, rebinding
+      only its material slot to the requested derived wood texture.
+- [x] Beacons: transparent black legacy beam background is normalized to the pack's beam colour for the current opaque beam renderer.
+- [ ] Oak Signs: legacy-to-modern sign UV repacking is still visually incorrect.
+- [ ] Wooden Signs: derive only after the oak sign UV map is visually correct.
+- [x] Wither Rose: derives from the pack's rose/poppy art.
+- [x] Invisible Strings: legacy top-row string art is copied into the current tripwire model's sampled UV band; atlas verification confirms opaque pixels there in PureBDcraft.
+- [x] Knowledge Book: selectively recolours the pack's warm book cover green while retaining its neutral pages and outlines.
+- [x] Leather Horse Armor: recolours legacy iron plates onto a warm leather ramp for both icon and equipped classic-horse sheet.
+- [x] Netherite Horse Armor: recolours legacy diamond plates onto the netherite ramp for both icon and equipped classic-horse sheet.
+- [x] Dog Armor: its armour layer now uses the legacy wolf part hierarchy whenever a legacy wolf sheet is active.
+- [ ] Baby Ocelot: classic uniform scaling must keep the head attached to the body.
+- [x] Baby Dog: uses a scaled classic wolf layer and 64×32 sheet rather than the incompatible modern baby layer.
+- [ ] Baby Dog: still broken
+- [ ] Baby Horse Family: render in the ground with only the head being out
+- [x] Dragon Fireball: retains the pack's grey fire-charge core and selectively recolours orange flame pixels purple.
+- [x] (BDCRAFT) Enderman: the legacy right arm now uses the current model's symmetric shoulder pivot rather than intersecting the torso.
+- [x] Wide Steve and Alex: slim and wide player-skin paths now resolve the legacy Steve/Alex sheets in every stock arm-model context.
+- [x] Glowing Squid: adult and baby textures derive from the pack's squid art.
+- [x] Glowing Ink sac: derives from the pack's ink-sac art.
+- [x] Magma Cubes: legacy 64×32 UV layout is restored when a legacy sheet is active.
+- [x] Glowing Item frames: block and item textures derive from the pack's item-frame art.
+- [ ] Armor on baby zombies: model completely broken
+- [x] Copper trapdoors: derive from iron trapdoors on a copper ramp and retain vanilla's copper-specific model.
+- [x] Nether Gold ore: transplants the pack's gold veins onto its netherrack, declining when the legacy ore host cannot be identified safely.
+- [x] Brown Mooshroom: selectively recolours the red mooshroom's cap/coat pixels to brown while preserving its body and pack-specific shading.
+- [ ] 3D models for ascending/descending basic rail: slope wrappers no longer self-parent after conversion; vanilla slope geometry receives the pack's converted rail sprite. (still broken after last fix attempt)
+- [ ] Baby Ozelot head is not attached to the body
+- [ ] Sign UV mapping is very bad
+- [ ] Eum3 Blue Revamp animated ores not working properly
 - [ ] Improve Minecraft 1.8.9 jar detection beyond the default launcher path, including custom
       game directories and third-party launchers.
 - [ ] Warn the user when the optional Minecraft 1.8.9 jar is missing or unreadable and legacy
       item-model fallback is therefore unavailable.
+- [ ] Beacon texture doesnt load (bdcraft)
+- [ ] Leather Horse Armor derivation should try to match the leather armor so that the shade match
+- [ ] Many items has incorrect item transform when held in offhand

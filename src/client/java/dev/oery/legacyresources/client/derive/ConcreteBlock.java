@@ -29,6 +29,14 @@ abstract class ConcreteBlock implements Derivation {
 	/** Appended to the colour name to make the output stem, e.g. {@code _concrete_powder}. */
 	protected abstract String suffix();
 
+	/**
+	 * The source field before it is painted. Powder keeps sand's granular field; hardened concrete can
+	 * deliberately smooth it so the two materials do not look like palette swaps of one tile.
+	 */
+	protected BufferedImage source(BufferedImage sand, Params params) {
+		return sand;
+	}
+
 	@Override
 	public final List<String> sources() {
 		return List.of(SAND);
@@ -77,7 +85,8 @@ abstract class ConcreteBlock implements Derivation {
 		if (sand == null || Ops.scaleOf(sand) == 0) {
 			return Map.of();
 		}
-		double mean = Ops.meanLuminance(sand);
+		BufferedImage field = source(sand, params);
+		double mean = Ops.meanLuminance(field);
 		// A wholly transparent sand has no brightness to follow and no structure to repaint.
 		if (mean <= 0) {
 			return Map.of();
@@ -92,7 +101,7 @@ abstract class ConcreteBlock implements Derivation {
 		Map<String, BufferedImage> derived = new LinkedHashMap<>();
 		for (ConcreteColor color : colors()) {
 			Palette palette = color.palette(saturationScale, brightness);
-			derived.put(texture(color), palette.repaint(sand, color.spread() * spreadScale, maxGain, levels));
+			derived.put(texture(color), palette.repaint(field, color.spread() * spreadScale, maxGain, levels));
 		}
 		return derived;
 	}

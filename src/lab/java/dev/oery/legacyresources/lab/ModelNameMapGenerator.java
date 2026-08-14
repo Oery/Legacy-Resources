@@ -69,7 +69,7 @@ public final class ModelNameMapGenerator {
 
 	private static void printReport(Result result) {
 		System.out.println("# Vanilla model-alias derivation exceptions\n");
-		System.out.println("Generated from `reference/1.8.9` and `reference/26.2` by `./gradlew generateModelNameMaps`. "
+		System.out.println("Generated from `reference/1.8.9` and `reference/26.2` by `./gradlew -PmodelMap.report generateModelNameMaps`. "
 			+ "These entries are deliberately excluded from `block_models.json`: they need a dedicated conversion or an explicit reviewed alias.\n");
 		System.out.println("## Legacy blockstates with no modern blockstate file\n");
 		for (Map.Entry<String, String> entry : result.unmatchedStates().entrySet()) {
@@ -104,11 +104,20 @@ public final class ModelNameMapGenerator {
 		Map<String, String> models = new TreeMap<>();
 		Map<String, Set<String>> ambiguous = new TreeMap<>();
 		for (Map.Entry<String, Set<String>> entry : modelSources.entrySet()) {
-			String source = entry.getValue().iterator().next();
-			if (entry.getValue().size() == 1 && !entry.getKey().equals(source)) {
-				models.put(entry.getKey(), source);
-			} else if (entry.getValue().size() > 1) {
-				ambiguous.put(entry.getKey(), Set.copyOf(entry.getValue()));
+			String target = entry.getKey();
+			Set<String> candidates = entry.getValue();
+			// An exact legacy spelling needs no alias at all: ResourceNameMaps falls through to identity
+			// and therefore selects it directly.  A removed legacy state property can contribute extra
+			// candidates (tripwire's suspended variants, wet sponge, lit redstone), but it must not make
+			// the report call that identity resolution ambiguous.  Only names which cannot resolve by
+			// themselves need an explicit map or a dedicated conversion.
+			if (candidates.contains(target)) {
+				continue;
+			}
+			if (candidates.size() == 1) {
+				models.put(target, candidates.iterator().next());
+			} else {
+				ambiguous.put(target, Set.copyOf(candidates));
 			}
 		}
 		return new Result(

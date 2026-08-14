@@ -5,10 +5,10 @@ import net.fabricmc.fabric.api.client.rendering.v1.EntityRendererRegistry;
 import net.minecraft.client.renderer.entity.HorseRenderer;
 import net.minecraft.client.renderer.entity.DonkeyRenderer;
 import net.minecraft.client.renderer.entity.UndeadHorseRenderer;
-import net.minecraft.client.renderer.entity.BatRenderer;
 import net.minecraft.client.renderer.entity.SheepRenderer;
 import net.minecraft.client.renderer.entity.PigRenderer;
 import net.minecraft.client.renderer.entity.ChickenRenderer;
+import net.minecraft.client.renderer.entity.WolfRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.model.geom.ModelLayers;
 import net.minecraft.client.resources.model.EquipmentClientInfo;
@@ -31,18 +31,17 @@ public final class LegacyEntityRenderers {
 		EntityRendererRegistry.register(EntityTypes.MULE, LegacyEntityRenderers::mule);
 		EntityRendererRegistry.register(EntityTypes.SKELETON_HORSE, LegacyEntityRenderers::skeletonHorse);
 		EntityRendererRegistry.register(EntityTypes.ZOMBIE_HORSE, LegacyEntityRenderers::zombieHorse);
-		EntityRendererRegistry.register(EntityTypes.BAT, LegacyEntityRenderers::bat);
 		EntityRendererRegistry.register(EntityTypes.SHEEP, LegacyEntityRenderers::sheep);
 		EntityRendererRegistry.register(EntityTypes.PIG, LegacyEntityRenderers::pig);
 		EntityRendererRegistry.register(EntityTypes.CHICKEN, LegacyEntityRenderers::chicken);
+		EntityRendererRegistry.register(EntityTypes.WOLF, LegacyEntityRenderers::wolf);
+		EntityRendererRegistry.register(EntityTypes.CAT, HybridCatRenderer::new);
 		EntityRendererRegistry.register(EntityTypes.RABBIT, HybridRabbitRenderer::new);
+		EntityRendererRegistry.register(EntityTypes.OCELOT, HybridOcelotRenderer::new);
 	}
 
 	private static net.minecraft.client.renderer.entity.EntityRenderer<net.minecraft.world.entity.animal.equine.Horse, ?> horse(EntityRendererProvider.Context context) {
 		return usesLegacy(context.getResourceManager(), HORSE_COATS) ? new HybridHorseRenderer(context) : new HorseRenderer(context);
-	}
-	private static net.minecraft.client.renderer.entity.EntityRenderer<net.minecraft.world.entity.ambient.Bat, ?> bat(EntityRendererProvider.Context c) {
-		Identifier t=Identifier.withDefaultNamespace("textures/entity/bat/bat.png"); return usesLegacy(c.getResourceManager(),new Identifier[]{t}) ? new ClassicBatRenderer(c) : new BatRenderer(c);
 	}
 	private static net.minecraft.client.renderer.entity.EntityRenderer<net.minecraft.world.entity.animal.sheep.Sheep, ?> sheep(EntityRendererProvider.Context c) {
 		Identifier t=Identifier.withDefaultNamespace("textures/entity/sheep/sheep_wool.png");return usesLegacy(c.getResourceManager(),new Identifier[]{t})?new ClassicSheepRenderer(c):new SheepRenderer(c);
@@ -52,6 +51,9 @@ public final class LegacyEntityRenderers {
 	}
 	private static net.minecraft.client.renderer.entity.EntityRenderer<net.minecraft.world.entity.animal.chicken.Chicken, ?> chicken(EntityRendererProvider.Context c) {
 		Identifier t=Identifier.withDefaultNamespace("textures/entity/chicken/chicken_temperate.png"); return usesLegacy(c.getResourceManager(),new Identifier[]{t}) ? new HybridChickenRenderer(c) : new ChickenRenderer(c);
+	}
+	private static net.minecraft.client.renderer.entity.EntityRenderer<net.minecraft.world.entity.animal.wolf.Wolf, ?> wolf(EntityRendererProvider.Context c) {
+		Identifier[] t={Identifier.withDefaultNamespace("textures/entity/wolf/wolf.png"),Identifier.withDefaultNamespace("textures/entity/wolf/wolf_tame.png"),Identifier.withDefaultNamespace("textures/entity/wolf/wolf_angry.png"),Identifier.withDefaultNamespace("textures/entity/wolf/wolf_collar.png")}; return usesLegacy(c.getResourceManager(),t) ? new HybridWolfRenderer(c) : new WolfRenderer(c);
 	}
 	private static net.minecraft.client.renderer.entity.EntityRenderer<net.minecraft.world.entity.animal.equine.Donkey, ?> donkey(EntityRendererProvider.Context c) {
 		Identifier t=id("donkey"); return usesLegacy(c.getResourceManager(),new Identifier[]{t}) ? new ClassicDonkeyRenderer<>(c,t) : new DonkeyRenderer<>(c,EquipmentClientInfo.LayerType.DONKEY_SADDLE,ModelLayers.DONKEY_SADDLE,DonkeyRenderer.Type.DONKEY,DonkeyRenderer.Type.DONKEY_BABY);

@@ -11,6 +11,7 @@ import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.component.DyedItemColor;
 
 /**
  * 1.8.9 drew iron, gold and diamond horse armour on the same 128x128 horse layout. Modern's
@@ -25,11 +26,16 @@ final class ClassicHorseArmorLayer extends RenderLayer<HorseRenderState, Classic
 		Identifier texture = texture(state.bodyArmorItem);
 		if (texture == null || state.isInvisible) return;
 		collector.order(2).submitModel(armorModel, state, pose, RenderTypes.entityCutout(texture), light,
-			LivingEntityRenderer.getOverlayCoords(state, 0), -1, null, state.outlineColor, (ModelFeatureRenderer.CrumblingOverlay)null);
+			LivingEntityRenderer.getOverlayCoords(state, 0), color(state.bodyArmorItem), null, state.outlineColor, (ModelFeatureRenderer.CrumblingOverlay)null);
 	}
 
 	private static Identifier texture(ItemStack armor) {
-		String material = armor.is(Items.IRON_HORSE_ARMOR) ? "iron" : armor.is(Items.GOLDEN_HORSE_ARMOR) ? "gold" : armor.is(Items.DIAMOND_HORSE_ARMOR) ? "diamond" : null;
+		String material = armor.is(Items.LEATHER_HORSE_ARMOR) ? "leather" : armor.is(Items.IRON_HORSE_ARMOR) ? "iron" : armor.is(Items.GOLDEN_HORSE_ARMOR) ? "gold" : armor.is(Items.DIAMOND_HORSE_ARMOR) ? "diamond" : armor.is(Items.NETHERITE_HORSE_ARMOR) ? "netherite" : null;
 		return material == null ? null : Identifier.withDefaultNamespace("textures/entity/horse/armor/horse_armor_" + material + ".png");
+	}
+
+	/** Match the equipment renderer: leather's default chestnut tint or its stack's dyed colour. */
+	private static int color(ItemStack armor) {
+		return armor.is(Items.LEATHER_HORSE_ARMOR) ? DyedItemColor.getOrDefault(armor, -6265536) : -1;
 	}
 }

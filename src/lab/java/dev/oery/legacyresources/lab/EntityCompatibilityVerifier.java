@@ -3,7 +3,9 @@ package dev.oery.legacyresources.lab;
 import dev.oery.legacyresources.client.convert.EntityTextureMappings;
 import dev.oery.legacyresources.client.convert.LegacyEndermanModel;
 import dev.oery.legacyresources.client.convert.LegacyWolfModel;
+import dev.oery.legacyresources.client.convert.LegacyWolfAnimalModel;
 import dev.oery.legacyresources.client.entity.ClassicHorseModel;
+import dev.oery.legacyresources.client.entity.LegacyPilotModelLabAccess;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -12,7 +14,6 @@ import net.minecraft.DetectedVersion;
 import net.minecraft.SharedConstants;
 import net.minecraft.server.Bootstrap;
 import net.minecraft.client.model.monster.enderman.EndermanModel;
-import net.minecraft.client.model.animal.wolf.AdultWolfModel;
 
 /**
  * Exercises the shipping resource wrapper over vanilla 1.8.9 and every legacy zip in the lab
@@ -43,9 +44,19 @@ public final class EntityCompatibilityVerifier {
 	/** Bakes every custom mesh through Minecraft's own part hierarchy constructors. */
 	private static void verifyModelTopologies() {
 		new EndermanModel(LegacyEndermanModel.createBodyLayer().bakeRoot());
-		new AdultWolfModel(LegacyWolfModel.createBodyLayer().bakeRoot());
+		new LegacyWolfAnimalModel(LegacyWolfModel.createBodyLayer().bakeRoot());
 		new ClassicHorseModel(ClassicHorseModel.createLayer().bakeRoot(), false, true);
 		new ClassicHorseModel(ClassicHorseModel.createLayer().bakeRoot(), true, true);
+		LegacyPilotModelLabAccess.cat();
+		LegacyPilotModelLabAccess.chicken(false);
+		LegacyPilotModelLabAccess.chicken(true);
+		LegacyPilotModelLabAccess.cow(false);
+		LegacyPilotModelLabAccess.cow(true);
+		LegacyPilotModelLabAccess.pig(false, 0);
+		LegacyPilotModelLabAccess.pig(true, 0);
+		LegacyPilotModelLabAccess.rabbit(false);
+		LegacyPilotModelLabAccess.rabbit(true);
+		LegacyPilotModelLabAccess.bat();
 	}
 
 	private static void verify(String name, LabPack pack, List<String> failures, boolean requireAll) {

@@ -13,21 +13,29 @@ import org.jspecify.annotations.Nullable;
  */
 public final class EntityTextureMappings {
 	private static final Map<String, String> VANILLA_COMPATIBLE = Map.ofEntries(
-		// The renderer registry selects ClassicBatModel before this 64x64 image is consumed.
-		Map.entry("textures/entity/bat/bat.png", "textures/entity/bat.png"),
 		Map.entry("textures/entity/armorstand/armorstand.png", "textures/entity/armorstand/wood.png"),
 		Map.entry("textures/entity/projectiles/arrow.png", "textures/entity/arrow.png"),
 		Map.entry("textures/entity/beacon/beacon_beam.png", "textures/entity/beacon_beam.png"),
 		Map.entry("textures/entity/blaze/blaze.png", "textures/entity/blaze.png"),
 		Map.entry("textures/entity/cow/cow_temperate_baby.png", "textures/entity/cow/cow.png"),
+		Map.entry("textures/entity/cow/mooshroom_red.png", "textures/entity/cow/mooshroom.png"),
 		Map.entry("textures/entity/cow/mooshroom_red_baby.png", "textures/entity/cow/mooshroom.png"),
 		// Temperate variants retain the 1.8.9 adult model/UV layout. Warm/cold variants are new art.
 		Map.entry("textures/entity/chicken/chicken_temperate.png", "textures/entity/chicken.png"),
 		Map.entry("textures/entity/pig/pig_temperate.png", "textures/entity/pig/pig.png"),
-		// The pre-1.14 tame-cat variants are still rendered on the compatible feline layout.
+		// 26.2 selects dedicated puppy sheets. The classic puppy model instead scales the adult
+		// 64x32 layout, so each default-wolf baby pass must keep sampling its 1.8.9 adult sheet.
+		Map.entry("textures/entity/wolf/wolf_baby.png", "textures/entity/wolf/wolf.png"),
+		Map.entry("textures/entity/wolf/wolf_tame_baby.png", "textures/entity/wolf/wolf_tame.png"),
+		Map.entry("textures/entity/wolf/wolf_angry_baby.png", "textures/entity/wolf/wolf_angry.png"),
+		Map.entry("textures/entity/wolf/wolf_collar_baby.png", "textures/entity/wolf/wolf_collar.png"),
+		// The cat renderer selects the classic feline mesh before consuming these adult/baby aliases.
 		Map.entry("textures/entity/cat/cat_black.png", "textures/entity/cat/black.png"),
+		Map.entry("textures/entity/cat/cat_black_baby.png", "textures/entity/cat/black.png"),
 		Map.entry("textures/entity/cat/cat_red.png", "textures/entity/cat/red.png"),
+		Map.entry("textures/entity/cat/cat_red_baby.png", "textures/entity/cat/red.png"),
 		Map.entry("textures/entity/cat/cat_siamese.png", "textures/entity/cat/siamese.png"),
+		Map.entry("textures/entity/cat/cat_siamese_baby.png", "textures/entity/cat/siamese.png"),
 		Map.entry("textures/entity/enchantment/enchanting_table_book.png", "textures/entity/enchanting_table_book.png"),
 		Map.entry("textures/entity/end_crystal/end_crystal.png", "textures/entity/endercrystal/endercrystal.png"),
 		Map.entry("textures/entity/end_crystal/end_crystal_beam.png", "textures/entity/endercrystal/endercrystal_beam.png"),

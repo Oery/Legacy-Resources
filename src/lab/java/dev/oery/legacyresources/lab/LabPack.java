@@ -53,6 +53,10 @@ final class LabPack {
 		return name;
 	}
 
+	PackResources resources() {
+		return resources;
+	}
+
 	/**
 	 * @param path modern texture path relative to {@code textures/}, without extension
 	 * @return the converted pack's texture, or empty if this pack has nothing that maps to it
@@ -64,6 +68,18 @@ final class LabPack {
 	boolean resolves(String path) {
 		Identifier id = Identifier.fromNamespaceAndPath("minecraft", path);
 		return resources.getResource(PackType.CLIENT_RESOURCES, id) != null;
+	}
+
+	Optional<String> text(String path) {
+		Identifier id = Identifier.fromNamespaceAndPath("minecraft", path);
+		IoSupplier<InputStream> supplier = resources.getResource(PackType.CLIENT_RESOURCES, id);
+		if (supplier == null) return Optional.empty();
+		try (InputStream in = supplier.get()) {
+			return Optional.of(new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8));
+		} catch (IOException e) {
+			LegacyResources.LOGGER.warn("Lab: failed to read {} from {}", id, name, e);
+			return Optional.empty();
+		}
 	}
 
 	private Optional<BufferedImage> load(String path) {

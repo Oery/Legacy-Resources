@@ -5,10 +5,12 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
+import com.google.gson.JsonPrimitive;
 import dev.oery.legacyresources.LegacyResources;
 import dev.oery.legacyresources.client.derive.Derivation;
 import dev.oery.legacyresources.client.derive.Derivations;
 import dev.oery.legacyresources.client.derive.Params;
+import dev.oery.legacyresources.client.derive.Ops;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.geom.AffineTransform;
@@ -67,6 +69,18 @@ public final class LegacyPackResources implements PackResources {
 	);
 	private static final Set<String> LOG_STEMS = Set.of(
 		"oak_log", "spruce_log", "birch_log", "jungle_log", "acacia_log", "dark_oak_log"
+	);
+	private static final Set<String> DERIVED_WOOD_TRAPDOOR_MODEL_STEMS = Set.of(
+		"spruce_trapdoor_bottom", "spruce_trapdoor_open", "spruce_trapdoor_top",
+		"birch_trapdoor_bottom", "birch_trapdoor_open", "birch_trapdoor_top",
+		"jungle_trapdoor_bottom", "jungle_trapdoor_open", "jungle_trapdoor_top",
+		"acacia_trapdoor_bottom", "acacia_trapdoor_open", "acacia_trapdoor_top",
+		"dark_oak_trapdoor_bottom", "dark_oak_trapdoor_open", "dark_oak_trapdoor_top",
+		"mangrove_trapdoor_bottom", "mangrove_trapdoor_open", "mangrove_trapdoor_top",
+		"cherry_trapdoor_bottom", "cherry_trapdoor_open", "cherry_trapdoor_top",
+		"crimson_trapdoor_bottom", "crimson_trapdoor_open", "crimson_trapdoor_top",
+		"warped_trapdoor_bottom", "warped_trapdoor_open", "warped_trapdoor_top",
+		"pale_oak_trapdoor_bottom", "pale_oak_trapdoor_open", "pale_oak_trapdoor_top"
 	);
 	/**
 	 * Block model stems that must never receive the generic {@link #computeBlockModel} fallback,
@@ -149,7 +163,10 @@ public final class LegacyPackResources implements PackResources {
 		"textures/entity/cow/cow_temperate.png", "textures/entity/cow/cow.png",
 		"textures/entity/cow/mooshroom_red.png", "textures/entity/cow/mooshroom.png",
 		"textures/entity/sheep/sheep_wool.png", "textures/entity/sheep/sheep_fur.png",
-		"textures/entity/player/slim/steve.png", "textures/entity/steve.png"
+		"textures/entity/player/slim/steve.png", "textures/entity/steve.png",
+		"textures/entity/player/wide/steve.png", "textures/entity/steve.png",
+		"textures/entity/player/slim/alex.png", "textures/entity/alex.png",
+		"textures/entity/player/wide/alex.png", "textures/entity/alex.png"
 	);
 	/**
 	 * The single alias target above (also this mod's oldest supported format) whose art can
@@ -197,9 +214,9 @@ public final class LegacyPackResources implements PackResources {
 	private static final int COMPASS_MODERN_FRAME_COUNT = 32;
 	private static final String FISHING_HOOK_TEXTURE_PATH = "textures/entity/fishing/fishing_hook.png";
 	/**
-	 * The two eras read {@code clouds.png} at completely different scales, so a pack whose sheet
-	 * isn't 256x256 needs resampling to that size - the file name never changed, which is exactly
-	 * why this one goes unnoticed.
+	 * The two eras read {@code clouds.png} at completely different scales. A pack's sheet is safe
+	 * only at the modern 256×256 grid; an HD sheet would render at {@code width / 256} its legacy
+	 * scale and produce visibly oversized cloud geometry.
 	 * <p>
 	 * 1.8.9's {@code RenderGlobal.renderCloudsFancy} steps its texture coordinate by a hardcoded
 	 * {@code 1/256} per 12-block cell: the whole sheet is stretched over 256 cells whatever its
@@ -210,20 +227,15 @@ public final class LegacyPackResources implements PackResources {
 	 * sheet renders clouds eight times too large over a 24,576-block period, off a 4.2M-entry cell
 	 * array rebuilt on every reload.
 	 * <p>
-	 * Resampling is by coverage, not by colour: modern's {@code encodeFace} writes three bytes of
-	 * position and direction per face and takes the cloud colour from a uniform, so the pixel's own
-	 * colour never reaches the GPU and the only thing a cell decides is present-or-absent. A cell is
-	 * therefore drawn when at least half the source pixels it covers are cloud, which reproduces the
-	 * silhouette 1.8.9 showed at its own 256-cell granularity; the averaged colour is carried across
-	 * anyway, against a future version reading it. Which pixels count as cloud is the whole
-	 * difficulty, and is per sheet - see {@link #cloudAlphaThreshold}.
-	 * <p>
-	 * A sheet already at 256x256 is passed through untouched rather than round-tripped through
-	 * ImageIO, which keeps the common case byte-for-byte identical. A smaller one is upsampled onto
-	 * the grid rather than declined: the four packs whose "clouds" is a single transparent pixel -
-	 * the pre-1.13 way of turning clouds off - come out an empty sheet and still render nothing.
+	 * Modern clouds are binary geometry rather than a sampled texture. Experiments resampling soft
+	 * painterly sheets produced either a solid cloud roof or nearly invisible wisps, neither matching
+	 * the legacy renderer. Non-256 sheets therefore decline cleanly to vanilla's clouds; this is more
+	 * faithful than presenting the pack's art at the wrong scale.
 	 */
 	private static final String CLOUDS_TEXTURE_PATH = "textures/environment/clouds.png";
+	private static final String TRIPWIRE_TEXTURE_PATH = "textures/block/tripwire.png";
+	private static final String BEACON_BEAM_TEXTURE_PATH = "textures/entity/beacon/beacon_beam.png";
+	private static final String LEGACY_BEACON_BEAM_TEXTURE_PATH = "textures/entity/beacon_beam.png";
 	private static final int CLOUD_CELLS_PER_REPEAT = 256;
 	/** {@code CloudRenderer.isCellEmpty}: a cell is drawn only where the sheet's alpha reaches this. */
 	private static final int CLOUD_CELL_MIN_ALPHA = 10;
@@ -234,6 +246,8 @@ public final class LegacyPackResources implements PackResources {
 	private static final String MODEL_BLOCK_DIR = "models/block/";
 	private static final String MODEL_ITEM_DIR = "models/item/";
 	private static final String ITEM_DEFINITION_DIR = "items/";
+	/** Legacy basic-rail wrappers parent themselves after name conversion; serve their old geometry directly. */
+	private static final Set<String> VANILLA_BASIC_RAIL_SLOPE_MODELS = Set.of("rail_raised_ne", "rail_raised_sw");
 	private static final String BLOCKSTATES_DIR = "blockstates/";
 	private static final String MODEL_DIR = "models/";
 	private static final List<String> ITEM_DISPLAY_CONTEXTS = List.of(
@@ -466,6 +480,9 @@ public final class LegacyPackResources implements PackResources {
 		// found to have nothing of its own that maps to the requested texture - a pack that ships the
 		// file is never second-guessed.
 		if (path.startsWith(NEW_BLOCK_TEXTURE_DIR) || path.startsWith(NEW_ITEM_TEXTURE_DIR)) {
+			if (path.equals(TRIPWIRE_TEXTURE_PATH)) {
+				return resolveJson(location, () -> computeTripwireTexture(location));
+			}
 			IoSupplier<InputStream> texture = resolveTexture(location, path);
 			return texture != null ? texture : resolveDerivedTexture(path);
 		}
@@ -474,6 +491,9 @@ public final class LegacyPackResources implements PackResources {
 		// humanoid armour and therefore have no generic equipment translation.
 		String vanillaCompatibleEntityPath = EntityTextureMappings.vanillaCompatibleLegacyPath(path);
 		if (vanillaCompatibleEntityPath != null) {
+			if (path.equals(BEACON_BEAM_TEXTURE_PATH)) {
+				return resolveJson(location, () -> computeBeaconBeamTexture(location));
+			}
 			return delegate.getResource(PackType.CLIENT_RESOURCES, location.withPath(vanillaCompatibleEntityPath));
 		}
 		if (path.startsWith(NEW_EQUIPMENT_TEXTURE_DIR)) {
@@ -487,17 +507,8 @@ public final class LegacyPackResources implements PackResources {
 			}
 			return delegate.getResource(PackType.CLIENT_RESOURCES, location.withPath(aliasPath));
 		}
-		if (path.equals(FISHING_HOOK_TEXTURE_PATH)) {
-			return resolveJson(location, () -> computeFishingHookTexture(location));
-		}
-		if (path.equals(CLOUDS_TEXTURE_PATH)) {
-			IoSupplier<InputStream> resampled = resolveJson(location, () -> computeCloudsTexture(location));
-			// Only a sheet that isn't 256x256 is rewritten; everything else falls through to the
-			// delegate below and is served exactly as the pack shipped it. See CLOUDS_TEXTURE_PATH.
-			if (resampled != null) {
-				return resampled;
-			}
-		}
+		// Chests live under textures/entity too, but need a UV/layout conversion before the generic
+		// entity branch preserves direct renderer textures below.
 		if (path.startsWith(CHEST_TEXTURE_DIR) && path.endsWith(".png")) {
 			String stem = path.substring(CHEST_TEXTURE_DIR.length(), path.length() - ".png".length());
 			IoSupplier<InputStream> chestTexture = resolveChestTexture(location, stem);
@@ -505,8 +516,29 @@ public final class LegacyPackResources implements PackResources {
 				return chestTexture;
 			}
 		}
+		if (path.startsWith("textures/entity/")) {
+			// Entity textures are loaded directly by renderers rather than through an atlas.  Preserve a
+			// pack's already-modern file when it has one, then let entity derivations cover genuinely new
+			// mobs (there is no listing/announcement step for this resource family).
+			IoSupplier<InputStream> direct = delegate.getResource(PackType.CLIENT_RESOURCES, location);
+			return direct != null ? direct : resolveDerivedTexture(path);
+		}
+		if (path.equals(FISHING_HOOK_TEXTURE_PATH)) {
+			return resolveJson(location, () -> computeFishingHookTexture(location));
+		}
+		if (path.equals(CLOUDS_TEXTURE_PATH)) {
+			// Returning null makes the resource manager continue to vanilla's pack.  Do this deliberately
+			// for every non-256 legacy sheet; passing it through is the scale regression this gate avoids.
+			return cloudSheetMatchesModernGrid(location) ? delegate.getResource(PackType.CLIENT_RESOURCES, location) : null;
+		}
 		if (path.startsWith(MODEL_BLOCK_DIR) && path.endsWith(".json")) {
 			String stem = path.substring(MODEL_BLOCK_DIR.length(), path.length() - ".json".length());
+			if (VANILLA_BASIC_RAIL_SLOPE_MODELS.contains(stem)) {
+				// normal_rail_raised_* is only a texture-binding wrapper around rail_raised_*. The
+				// name conversion maps both to this current path, making the wrapper its own parent.
+				// Start from the old geometry instead and provide its binding here.
+				return resolveJson(location, () -> computeBasicRailSlopeModel(location, stem));
+			}
 			Identifier legacyLocation = location.withPath(MODEL_BLOCK_DIR + ResourceNameMaps.oldBlockModelName(stem) + JSON_SUFFIX);
 			return resolveJson(location, () -> computeBlockModel(legacyLocation, stem));
 		}
@@ -863,15 +895,18 @@ public final class LegacyPackResources implements PackResources {
 		if (oldPath == null) {
 			return null;
 		}
-		IoSupplier<InputStream> mapped = delegate.getResource(PackType.CLIENT_RESOURCES, location.withPath(oldPath));
-		if (mapped != null) {
+		Identifier mappedId = location.withPath(oldPath);
+		IoSupplier<InputStream> mapped = delegate.getResource(PackType.CLIENT_RESOURCES, mappedId);
+		if (mapped != null && isValidLegacyTexture(mappedId, mapped)) {
 			return mapped;
 		}
 		String unmappedPath = untranslatedTexturePath(path);
 		if (unmappedPath == null || unmappedPath.equals(oldPath)) {
 			return null;
 		}
-		return delegate.getResource(PackType.CLIENT_RESOURCES, location.withPath(unmappedPath));
+		Identifier unmappedId = location.withPath(unmappedPath);
+		IoSupplier<InputStream> unmapped = delegate.getResource(PackType.CLIENT_RESOURCES, unmappedId);
+		return unmapped != null && isValidLegacyTexture(unmappedId, unmapped) ? unmapped : null;
 	}
 
 	/**
@@ -896,6 +931,53 @@ public final class LegacyPackResources implements PackResources {
 		if (!path.endsWith(".png")) return null;
 		byte[] bytes = derivedTexture(path.substring(TEXTURE_DIR.length(), path.length() - ".png".length()));
 		return bytes == null ? null : () -> new ByteArrayInputStream(bytes);
+	}
+
+	/**
+	 * 1.8's tripwire quads sampled the string at the top of {@code trip_wire.png}; current
+	 * {@code tripwire_*} models sample UV rows 4–6 instead. HD legacy packs commonly only draw the
+	 * former, so serving the file unchanged produces fully transparent quads. Copy that authored
+	 * two-row strip into the current sample band while preserving the rest of the pack's sheet.
+	 */
+	private byte @Nullable [] computeTripwireTexture(Identifier location) {
+		IoSupplier<InputStream> source = resolveTexture(location, TRIPWIRE_TEXTURE_PATH);
+		if (source == null) return null;
+		try (InputStream in = source.get()) {
+			BufferedImage image = ImageIO.read(in);
+			if (image == null || image.getWidth() != image.getHeight() || image.getWidth() < 16 || image.getWidth() % 16 != 0) return null;
+			int scale = image.getWidth() / 16;
+			int[] strip = image.getRGB(0, 0, image.getWidth(), 2 * scale, null, 0, image.getWidth());
+			image.setRGB(0, 4 * scale, image.getWidth(), 2 * scale, strip, 0, image.getWidth());
+			ByteArrayOutputStream out = new ByteArrayOutputStream();
+			ImageIO.write(image, "png", out);
+			return out.toByteArray();
+		} catch (IOException e) {
+			LegacyResources.LOGGER.warn("Failed to re-pack legacy tripwire texture in pack {}", location().id(), e);
+			return null;
+		}
+	}
+
+	/** Current beacon beam rendering treats its pattern as opaque; legacy packs often encode its background as transparent black. */
+	private byte @Nullable [] computeBeaconBeamTexture(Identifier location) {
+		IoSupplier<InputStream> source = delegate.getResource(PackType.CLIENT_RESOURCES, location.withPath(LEGACY_BEACON_BEAM_TEXTURE_PATH));
+		if (source == null) return null;
+		try (InputStream in = source.get()) {
+			BufferedImage image = ImageIO.read(in);
+			if (image == null) return null;
+			int[] pixels = Ops.pixels(image);
+			long red = 0, green = 0, blue = 0, count = 0;
+			for (int pixel : pixels) if (Ops.alpha(pixel) != 0) { red += Ops.red(pixel); green += Ops.green(pixel); blue += Ops.blue(pixel); count++; }
+			if (count == 0) return null;
+			int fill = Ops.argb(255, (int) (red / count), (int) (green / count), (int) (blue / count));
+			for (int i = 0; i < pixels.length; i++) if (Ops.alpha(pixels[i]) == 0) pixels[i] = fill;
+			BufferedImage opaque = Ops.image(pixels, image.getWidth(), image.getHeight());
+			ByteArrayOutputStream out = new ByteArrayOutputStream();
+			ImageIO.write(opaque, "png", out);
+			return out.toByteArray();
+		} catch (IOException e) {
+			LegacyResources.LOGGER.warn("Failed to normalize legacy beacon beam in pack {}", location().id(), e);
+			return null;
+		}
 	}
 
 	/** Serves source animation metadata alongside a derived animation strip. */
@@ -1408,45 +1490,18 @@ public final class LegacyPackResources implements PackResources {
 		}
 	}
 
-	/**
-	 * Resamples a legacy pack's cloud sheet onto modern's one-pixel-per-cell grid; see
-	 * {@link #CLOUDS_TEXTURE_PATH} for why, and {@code null} (pass the pack's own file through
-	 * untouched) whenever it is already 256x256 or cannot be read as an image.
-	 */
-	private byte @Nullable [] computeCloudsTexture(Identifier location) {
+	/** Whether the pack's sheet already has modern's one-pixel-per-cloud-cell dimensions. */
+	private boolean cloudSheetMatchesModernGrid(Identifier location) {
 		IoSupplier<InputStream> supplier = delegate.getResource(PackType.CLIENT_RESOURCES, location);
 		if (supplier == null) {
-			return null;
+			return false;
 		}
 		try (InputStream in = supplier.get()) {
 			BufferedImage source = ImageIO.read(in);
-			if (source == null || source.getWidth() <= 0 || source.getHeight() <= 0
-				|| (source.getWidth() == CLOUD_CELLS_PER_REPEAT && source.getHeight() == CLOUD_CELLS_PER_REPEAT)) {
-				return null;
-			}
-			int width = source.getWidth();
-			int height = source.getHeight();
-			int[] pixels = source.getRGB(0, 0, width, height, null, 0, width);
-			int threshold = cloudAlphaThreshold(pixels);
-			BufferedImage out =
-				new BufferedImage(CLOUD_CELLS_PER_REPEAT, CLOUD_CELLS_PER_REPEAT, BufferedImage.TYPE_INT_ARGB);
-			for (int cellY = 0; cellY < CLOUD_CELLS_PER_REPEAT; cellY++) {
-				int top = cellY * height / CLOUD_CELLS_PER_REPEAT;
-				// At least one source row per cell, so a sheet smaller than the grid (a 1x1 "no
-				// clouds" pack, say) upsamples instead of collapsing to an empty span.
-				int bottom = Math.max(top + 1, (cellY + 1) * height / CLOUD_CELLS_PER_REPEAT);
-				for (int cellX = 0; cellX < CLOUD_CELLS_PER_REPEAT; cellX++) {
-					int left = cellX * width / CLOUD_CELLS_PER_REPEAT;
-					int right = Math.max(left + 1, (cellX + 1) * width / CLOUD_CELLS_PER_REPEAT);
-					out.setRGB(cellX, cellY, cloudCell(pixels, width, left, top, right, bottom, threshold));
-				}
-			}
-			ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-			ImageIO.write(out, "png", bytes);
-			return bytes.toByteArray();
+			return source != null && source.getWidth() == CLOUD_CELLS_PER_REPEAT && source.getHeight() == CLOUD_CELLS_PER_REPEAT;
 		} catch (IOException e) {
-			LegacyResources.LOGGER.warn("Failed to resample the cloud sheet in legacy pack {}", location().id(), e);
-			return null;
+			LegacyResources.LOGGER.warn("Failed to read cloud sheet in legacy pack {}", location().id(), e);
+			return false;
 		}
 	}
 
@@ -1830,6 +1885,9 @@ public final class LegacyPackResources implements PackResources {
 
 	private byte @Nullable [] computeBlockModel(Identifier location, String stem) {
 		if (packHas(location)) {
+			if (DERIVED_WOOD_TRAPDOOR_MODEL_STEMS.contains(stem)) {
+				return derivedWoodTrapdoorModel(location, stem);
+			}
 			return tryRewriteModel(location, bedColor(stem, location), stem);
 		}
 		String namespace = location.getNamespace();
@@ -1892,6 +1950,47 @@ public final class LegacyPackResources implements PackResources {
 				: FallbackModelGenerator.cubeAllModel(namespace, stem);
 		}
 		return null;
+	}
+
+	/** Builds a finished model from a legacy rail wrapper without converting it into a self-parent. */
+	private byte @Nullable [] computeBasicRailSlopeModel(Identifier location, String stem) {
+		Identifier wrapper = location.withPath(MODEL_BLOCK_DIR + ResourceNameMaps.oldBlockModelName(stem) + JSON_SUFFIX);
+		if (!packHas(wrapper)) {
+			return null;
+		}
+		// The old wrapper supplied only the rail sprite to its rail_raised_* parent. The current
+		// template is that same geometry under a non-colliding name, so preserve the wrapper's role
+		// rather than trying to expose either old name as a parent.
+		JsonObject model = new JsonObject();
+		model.addProperty(PARENT_KEY, "minecraft:block/template_" + stem);
+		JsonObject textures = new JsonObject();
+		textures.addProperty("rail", "minecraft:block/rail");
+		model.add(TEXTURES_KEY, textures);
+		return GSON.toJson(model).getBytes(StandardCharsets.UTF_8);
+	}
+
+	/**
+	 * Later wood types reuse the legacy wooden trapdoor's custom geometry, while their derived
+	 * texture replaces only its material slot. This retains details such as BDcraft's hinges and
+	 * overlays, which live in the template parent and have no reason to be recoloured.
+	 */
+	private byte @Nullable [] derivedWoodTrapdoorModel(Identifier legacyLocation, String targetStem) {
+		String namespace = legacyLocation.getNamespace();
+		String textureStem = targetStem.substring(0, targetStem.lastIndexOf('_'));
+		Identifier targetTexture = Identifier.fromNamespaceAndPath(namespace, NEW_BLOCK_TEXTURE_DIR + textureStem + ".png");
+		if (getResource(PackType.CLIENT_RESOURCES, targetTexture) == null) return null;
+		byte[] converted = tryRewriteModel(legacyLocation, null);
+		if (converted == null) return null;
+		try {
+			JsonElement parsed = JsonParser.parseString(new String(converted, StandardCharsets.UTF_8));
+			if (!parsed.isJsonObject()) return null;
+			JsonElement textures = parsed.getAsJsonObject().get(TEXTURES_KEY);
+			if (textures == null || !textures.isJsonObject()) return null;
+			textures.getAsJsonObject().addProperty("texture", namespace + ":block/" + textureStem);
+			return GSON.toJson(parsed).getBytes(StandardCharsets.UTF_8);
+		} catch (JsonParseException e) {
+			return null;
+		}
 	}
 
 	/** Converts the pack's regular torch geometry, then rebinds it to the two soul-fire sprites. */
