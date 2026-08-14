@@ -3,8 +3,10 @@ package dev.oery.legacyresources.lab;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.mojang.serialization.JsonOps;
 import dev.oery.legacyresources.client.convert.LabPackAccess;
 import java.awt.Color;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
@@ -17,6 +19,8 @@ import net.minecraft.client.resources.model.cuboid.ItemTransforms;
 import net.minecraft.DetectedVersion;
 import net.minecraft.SharedConstants;
 import net.minecraft.client.ClientBootstrap;
+import net.minecraft.client.resources.metadata.animation.AnimationMetadataSection;
+import net.minecraft.client.resources.metadata.animation.FrameSize;
 import net.minecraft.client.resources.model.ClientItemInfoLoader;
 import net.minecraft.client.resources.model.ModelDiscovery;
 import net.minecraft.client.resources.model.ResolvedModel;
@@ -56,6 +60,9 @@ public final class ReportedIssueVerifier {
 		LabPack occult = corpus.packs().stream()
 			.filter(pack -> pack.name().toLowerCase().contains("occult")).findFirst()
 			.orElseThrow(() -> new IllegalStateException("Occult is required for this regression check"));
+		LabPack eum3 = corpus.packs().stream()
+			.filter(pack -> pack.name().toLowerCase().contains("eum3 blue revamp")).findFirst()
+			.orElseThrow(() -> new IllegalStateException("EUM3 Blue Revamp is required for this regression check"));
 		LabPack control = corpus.control();
 		if (control == null) throw new IllegalStateException("1.8.9 vanilla control is required for item-model checks");
 		verifyItemDefinitionRouting(control);
@@ -86,7 +93,64 @@ public final class ReportedIssueVerifier {
 		verifyPlayerSkins(bdcraft);
 		verifyTripwire(bdcraft);
 		verifyBeaconBeam(bdcraft);
+		verifyLegacyAnimationMetadata(eum3);
 		System.out.println("Verified reported custom-model regressions against " + bdcraft.name());
+	}
+
+	private static void verifyLegacyAnimationMetadata(LabPack pack) {
+		for (String stem : List.of(
+			"coal_ore", "iron_ore", "gold_ore", "redstone_ore", "lapis_ore", "diamond_ore", "emerald_ore", "nether_quartz_ore"
+		)) {
+			verifySquareAnimationFrames(pack, stem);
+		}
+		// Derived ore strips copy their source animation contract and must receive the same rewrite.
+		verifySquareAnimationFrames(pack, "deepslate_coal_ore");
+		verifySquareAnimationFrames(pack, "copper_ore");
+		verifySquareAnimationFrames(pack, "deepslate_copper_ore");
+	}
+
+	private static void verifySquareAnimationFrames(LabPack pack, String stem) {
+		var image = pack.texture("block/" + stem)
+			.orElseThrow(() -> new IllegalStateException(pack.name() + " is missing animated texture " + stem));
+		String path = "textures/block/" + stem + ".png.mcmeta";
+		String direct = pack.text(path)
+			.orElseThrow(() -> new IllegalStateException(pack.name() + " is missing animation metadata " + stem));
+		assertSquareFrameMetadata(pack, stem, direct, image.getWidth(), image.getHeight(), "direct lookup");
+		String listed = listedText(pack, path);
+		assertSquareFrameMetadata(pack, stem, listed, image.getWidth(), image.getHeight(), "atlas listing");
+	}
+
+	private static void assertSquareFrameMetadata(
+		LabPack pack, String stem, String json, int width, int height, String route
+	) {
+		JsonObject root = JsonParser.parseString(json).getAsJsonObject();
+		JsonObject animationJson = root.getAsJsonObject("animation");
+		if (animationJson == null || animationJson.has("width") || animationJson.has("height")) {
+			throw new IllegalStateException(pack.name() + " retained legacy frame dimensions for " + stem + " via " + route + ": " + json);
+		}
+		AnimationMetadataSection animation = AnimationMetadataSection.CODEC
+			.parse(JsonOps.INSTANCE, animationJson).getOrThrow();
+		FrameSize actual = animation.calculateFrameSize(width, height);
+		FrameSize expected = new FrameSize(width, width);
+		if (!actual.equals(expected)) {
+			throw new IllegalStateException(pack.name() + " calculated " + actual + " rather than " + expected + " for " + stem + " via " + route);
+		}
+	}
+
+	private static String listedText(LabPack pack, String path) {
+		String[] found = new String[1];
+		pack.resources().listResources(PackType.CLIENT_RESOURCES, "minecraft", "textures/block", (id, supplier) -> {
+			if (!id.getPath().equals(path)) return;
+			try (var in = supplier.get()) {
+				found[0] = new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+			} catch (IOException e) {
+				throw new IllegalStateException("Cannot read listed metadata " + id + " from " + pack.name(), e);
+			}
+		});
+		if (found[0] == null) {
+			throw new IllegalStateException(pack.name() + " did not announce " + path);
+		}
+		return found[0];
 	}
 
 	private static void verifyItemDefinitionRouting(LabPack pack) {

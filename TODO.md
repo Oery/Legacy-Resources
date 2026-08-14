@@ -543,7 +543,7 @@ that fails silently - an unannounced sprite renders as vanilla's art with nothin
 - [ ] 3D models for ascending/descending basic rail: slope wrappers no longer self-parent after conversion; vanilla slope geometry receives the pack's converted rail sprite. (still broken after last fix attempt)
 - [ ] Baby Ozelot head is not attached to the body
 - [ ] Sign UV mapping is very bad
-- [ ] Eum3 Blue Revamp animated ores not working properly
+- [x] Eum3 Blue Revamp animated ores not working properly
 - [ ] Improve Minecraft 1.8.9 jar detection beyond the default launcher path, including custom
       game directories and third-party launchers.
 - [ ] Warn the user when the optional Minecraft 1.8.9 jar is missing or unreadable and legacy

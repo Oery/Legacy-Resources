@@ -496,6 +496,9 @@ public final class LegacyPackResources implements PackResources {
 			if (path.equals(TRIPWIRE_TEXTURE_PATH)) {
 				return resolveJson(location, () -> computeTripwireTexture(location));
 			}
+			if (path.endsWith(".png.mcmeta")) {
+				return resolveLegacyTextureMetadata(location, path);
+			}
 			IoSupplier<InputStream> texture = resolveTexture(location, path);
 			return texture != null ? texture : resolveDerivedTexture(path);
 		}
@@ -606,6 +609,13 @@ public final class LegacyPackResources implements PackResources {
 				for (Identifier newId : translateListed(
 					oldId, OLD_BLOCK_TEXTURE_DIR, NEW_BLOCK_TEXTURE_DIR, TextureNameMaps::newBlockNames
 				)) {
+					if (newId.getPath().endsWith(".png.mcmeta")) {
+						IoSupplier<InputStream> metadata = getResource(PackType.CLIENT_RESOURCES, newId);
+						if (metadata != null) {
+							output.accept(newId, metadata);
+						}
+						continue;
+					}
 					// Keep in sync with the getResource intercept: the dot is synthesized, not a raw
 					// passthrough of the legacy file, so listing must fetch it the same way.
 					if (newId.getPath().equals(REDSTONE_DUST_DOT_TEXTURE_PATH)) {
@@ -632,7 +642,16 @@ public final class LegacyPackResources implements PackResources {
 				if (newIds.isEmpty() || !isValidLegacyTexture(oldId, supplier)) {
 					return;
 				}
-				newIds.forEach(newId -> output.accept(newId, supplier));
+				newIds.forEach(newId -> {
+					if (newId.getPath().endsWith(".png.mcmeta")) {
+						IoSupplier<InputStream> metadata = getResource(PackType.CLIENT_RESOURCES, newId);
+						if (metadata != null) {
+							output.accept(newId, metadata);
+						}
+					} else {
+						output.accept(newId, supplier);
+					}
+				});
 			});
 			// item/compass_00..31 are standalone sprites with no legacy-pack file of their own
 			// (see LEGACY_COMPASS_TEXTURE_PATH's javadoc) - like the redstone dust textures above,
@@ -925,6 +944,57 @@ public final class LegacyPackResources implements PackResources {
 		Identifier unmappedId = location.withPath(unmappedPath);
 		IoSupplier<InputStream> unmapped = delegate.getResource(PackType.CLIENT_RESOURCES, unmappedId);
 		return unmapped != null && isValidLegacyTexture(unmappedId, unmapped) ? unmapped : null;
+	}
+
+	/**
+	 * Rewrites animation metadata from the semantics its legacy loader actually used.
+	 * <p>
+	 * Pre-flattening Minecraft parsed {@code animation.width}/{@code height}, but its atlas loader
+	 * ignored both values and always split a vertical strip into square frames as wide as the PNG.
+	 * Current Minecraft honors them. Some old packs consequently contain harmless legacy values such
+	 * as EUM3's {@code width: 1, height: 7} beside a 16x112 seven-frame ore strip; passing that JSON
+	 * through now makes the atlas build 1x7 sprites instead of the intended 16x16 ones. Removing the
+	 * two fields precisely restores the old loader's frame-size rule while preserving the authored
+	 * frame order, per-frame times, default time and interpolation setting.
+	 */
+	private @Nullable IoSupplier<InputStream> resolveLegacyTextureMetadata(Identifier location, String path) {
+		IoSupplier<InputStream> source = resolveTexture(location, path);
+		if (source == null) {
+			return resolveDerivedTexture(path);
+		}
+		return resolveJson(location, () -> normalizeLegacyAnimationMetadata(location, source));
+	}
+
+	private byte @Nullable [] normalizeLegacyAnimationMetadata(
+		Identifier location, IoSupplier<InputStream> source
+	) {
+		try (InputStream in = source.get()) {
+			byte[] original = in.readAllBytes();
+			JsonElement parsed;
+			try {
+				parsed = JsonParser.parseString(new String(original, StandardCharsets.UTF_8));
+			} catch (JsonParseException e) {
+				// Preserve the pack's previous behaviour for malformed metadata: the game remains the
+				// authority that accepts or rejects JSON unrelated to this compatibility rewrite.
+				return original;
+			}
+			if (!parsed.isJsonObject()) {
+				return original;
+			}
+			JsonElement animationElement = parsed.getAsJsonObject().get("animation");
+			if (animationElement == null || !animationElement.isJsonObject()) {
+				return original;
+			}
+			JsonObject animation = animationElement.getAsJsonObject();
+			boolean hadWidth = animation.remove("width") != null;
+			boolean hadHeight = animation.remove("height") != null;
+			return hadWidth || hadHeight
+				? GSON.toJson(parsed).getBytes(StandardCharsets.UTF_8)
+				: original;
+		} catch (IOException e) {
+			LegacyResources.LOGGER.warn("Failed to normalize legacy animation metadata {} in pack {}", location, location().id(), e);
+			return null;
+		}
 	}
 
 	/**
