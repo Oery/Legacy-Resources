@@ -272,6 +272,17 @@ tasks.register('verifyReportedIssues', JavaExec) {
 	}
 }
 
+tasks.register('verifyParticleCompatibility', JavaExec) {
+	group = 'verification'
+	description = 'Checks legacy particle sheets through direct lookup and the current particle atlas listing'
+	classpath = sourceSets.lab.runtimeClasspath
+	mainClass = 'dev.oery.legacyresources.lab.ParticleCompatibilityVerifier'
+	systemProperty 'lab.project', projectDir.absolutePath
+	if (project.hasProperty('lab.packs')) {
+		systemProperty 'lab.packs', project.property('lab.packs')
+	}
+}
+
 tasks.register('verifyLegacyItemTransforms', JavaExec) {
 	group = 'verification'
 	description = 'Checks legacy item display matrices against the 1.8.9 vanilla model tree'

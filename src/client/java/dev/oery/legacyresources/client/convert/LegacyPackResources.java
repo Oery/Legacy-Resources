@@ -202,15 +202,6 @@ public final class LegacyPackResources implements PackResources {
 	 */
 	private static final String STEVE_TEXTURE_PATH = "textures/entity/steve.png";
 	/**
-	 * Pre-1.13 Minecraft rendered the fishing bobber by cropping a fixed icon cell out of the
-	 * shared particle sheet, rather than using its own texture file. The modern renderer always
-	 * loads a dedicated {@link #FISHING_HOOK_TEXTURE_PATH} and never reads the particle sheet, so
-	 * there's no path to alias - instead the icon is cropped from the legacy pack's own
-	 * {@link #PARTICLE_ATLAS_PATH} at load time and served as a synthesized PNG. The icon's grid
-	 * cell (column 1, row 2 of a 16x16 grid) was confirmed empirically: two independently drawn
-	 * legacy packs both have a fishhook-shaped icon at that exact cell.
-	 */
-	/**
 	 * 1.8.9 renders the compass needle by picking a frame directly out of a single animated
 	 * strip texture ({@code textures/items/compass.png}, a square-frame vertical strip like
 	 * {@code fire_layer_0.png} or {@code water_still.png}), sized to however many frames the
@@ -228,7 +219,6 @@ public final class LegacyPackResources implements PackResources {
 	private static final String LEGACY_COMPASS_TEXTURE_PATH = "textures/items/compass.png";
 	private static final String COMPASS_FRAME_STEM_PREFIX = "compass_";
 	private static final int COMPASS_MODERN_FRAME_COUNT = 32;
-	private static final String FISHING_HOOK_TEXTURE_PATH = "textures/entity/fishing/fishing_hook.png";
 	/**
 	 * The two eras read {@code clouds.png} at completely different scales. A pack's sheet is safe
 	 * only at the modern 256×256 grid; an HD sheet would render at {@code width / 256} its legacy
@@ -255,10 +245,6 @@ public final class LegacyPackResources implements PackResources {
 	private static final int CLOUD_CELLS_PER_REPEAT = 256;
 	/** {@code CloudRenderer.isCellEmpty}: a cell is drawn only where the sheet's alpha reaches this. */
 	private static final int CLOUD_CELL_MIN_ALPHA = 10;
-	private static final String PARTICLE_ATLAS_PATH = "textures/particle/particles.png";
-	private static final int PARTICLE_ATLAS_GRID = 16;
-	private static final int FISHING_HOOK_ATLAS_COLUMN = 1;
-	private static final int FISHING_HOOK_ATLAS_ROW = 2;
 	private static final String MODEL_BLOCK_DIR = "models/block/";
 	private static final String MODEL_ITEM_DIR = "models/item/";
 	private static final String ITEM_DEFINITION_DIR = "items/";
@@ -530,6 +516,13 @@ public final class LegacyPackResources implements PackResources {
 			}
 			return delegate.getResource(PackType.CLIENT_RESOURCES, location.withPath(aliasPath));
 		}
+		LegacyParticleSprites.Crop particleCrop = LegacyParticleSprites.crop(path);
+		if (particleCrop != null) {
+			// Hybrid packs occasionally carry already-modern files. Their explicit sprite wins; the
+			// legacy sheet is only the compatibility fallback for the file this era could not have.
+			IoSupplier<InputStream> direct = delegate.getResource(PackType.CLIENT_RESOURCES, location);
+			return direct != null ? direct : resolveJson(location, () -> computeLegacySheetCrop(location, particleCrop));
+		}
 		// Chests live under textures/entity too, but need a UV/layout conversion before the generic
 		// entity branch preserves direct renderer textures below.
 		if (path.startsWith(CHEST_TEXTURE_DIR) && path.endsWith(".png")) {
@@ -545,9 +538,6 @@ public final class LegacyPackResources implements PackResources {
 			// mobs (there is no listing/announcement step for this resource family).
 			IoSupplier<InputStream> direct = delegate.getResource(PackType.CLIENT_RESOURCES, location);
 			return direct != null ? direct : resolveDerivedTexture(path);
-		}
-		if (path.equals(FISHING_HOOK_TEXTURE_PATH)) {
-			return resolveJson(location, () -> computeFishingHookTexture(location));
 		}
 		if (path.equals(CLOUDS_TEXTURE_PATH)) {
 			// Returning null makes the resource manager continue to vanilla's pack.  Do this deliberately
@@ -608,6 +598,19 @@ public final class LegacyPackResources implements PackResources {
 				}
 			}
 			return;
+		}
+		if (namespace.equals("minecraft")
+			&& (isOrUnder(directory, LegacyParticleSprites.MODERN_TEXTURE_ROOT)
+				|| directoryCovers(directory, LegacyParticleSprites.MODERN_TEXTURE_ROOT))) {
+			String prefix = isOrUnder(directory, LegacyParticleSprites.MODERN_TEXTURE_ROOT)
+				? directory + "/" : LegacyParticleSprites.MODERN_TEXTURE_DIR;
+			for (String path : LegacyParticleSprites.modernPaths()) {
+				if (!path.startsWith(prefix)) continue;
+				Identifier id = Identifier.fromNamespaceAndPath(namespace, path);
+				IoSupplier<InputStream> resource = getResource(PackType.CLIENT_RESOURCES, id);
+				if (resource != null) output.accept(id, resource);
+			}
+			// Do not return: preserve any direct particle files the pack already carries too.
 		}
 
 		if (isOrUnder(directory, "textures/block")) {
@@ -920,7 +923,13 @@ public final class LegacyPackResources implements PackResources {
 
 	@Override
 	public void close() {
-		delegate.close();
+		try {
+			delegate.close();
+		} finally {
+			jsonCache.clear();
+			sheetCache.clear();
+			derivedCache.clear();
+		}
 	}
 
 	/**
@@ -1590,28 +1599,32 @@ public final class LegacyPackResources implements PackResources {
 		return true;
 	}
 
-	private byte @Nullable [] computeFishingHookTexture(Identifier location) {
-		IoSupplier<InputStream> atlasSupplier = delegate.getResource(
-			PackType.CLIENT_RESOURCES, location.withPath(PARTICLE_ATLAS_PATH)
-		);
-		if (atlasSupplier == null) {
+	/**
+	 * Unpacks one named modern particle sprite from the sheet coordinates used by 1.8.9's renderer.
+	 * Both dimensions are scaled independently so valid rectangular HD sheets retain their authored
+	 * pixel aspect; a non-integral grid is declined because the old UV grid could not address it
+	 * cleanly either.
+	 */
+	private byte @Nullable [] computeLegacySheetCrop(Identifier location, LegacyParticleSprites.Crop crop) {
+		BufferedImage sheet = loadSheet(crop.legacyPath());
+		if (sheet == null || sheet.getWidth() % crop.columns() != 0 || sheet.getHeight() % crop.rows() != 0) {
 			return null;
 		}
-		try (InputStream in = atlasSupplier.get()) {
-			BufferedImage atlas = ImageIO.read(in);
-			if (atlas == null || atlas.getWidth() % PARTICLE_ATLAS_GRID != 0 || atlas.getHeight() % PARTICLE_ATLAS_GRID != 0) {
-				return null;
-			}
-			int cellWidth = atlas.getWidth() / PARTICLE_ATLAS_GRID;
-			int cellHeight = atlas.getHeight() / PARTICLE_ATLAS_GRID;
-			BufferedImage icon = atlas.getSubimage(
-				FISHING_HOOK_ATLAS_COLUMN * cellWidth, FISHING_HOOK_ATLAS_ROW * cellHeight, cellWidth, cellHeight
-			);
+		int cellWidth = sheet.getWidth() / crop.columns();
+		int cellHeight = sheet.getHeight() / crop.rows();
+		int x = crop.column() * cellWidth;
+		int y = crop.row() * cellHeight;
+		int width = crop.width() * cellWidth;
+		int height = crop.height() * cellHeight;
+		if (x + width > sheet.getWidth() || y + height > sheet.getHeight()) return null;
+		try {
+			BufferedImage sprite = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+			sprite.setRGB(0, 0, width, height, sheet.getRGB(x, y, width, height, null, 0, width), 0, width);
 			ByteArrayOutputStream out = new ByteArrayOutputStream();
-			ImageIO.write(icon, "png", out);
+			ImageIO.write(sprite, "png", out);
 			return out.toByteArray();
 		} catch (IOException e) {
-			LegacyResources.LOGGER.warn("Failed to crop fishing hook icon from legacy particle atlas in pack {}", location().id(), e);
+			LegacyResources.LOGGER.warn("Failed to unpack legacy sheet {} as {} in pack {}", crop.legacyPath(), location, location().id(), e);
 			return null;
 		}
 	}

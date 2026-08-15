@@ -124,6 +124,10 @@ final class LabPack {
 	}
 
 	void close() {
-		resources.close();
+		try {
+			resources.close();
+		} finally {
+			textureCache.clear();
+		}
 	}
 }
