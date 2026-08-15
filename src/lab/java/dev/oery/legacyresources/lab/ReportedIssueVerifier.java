@@ -71,6 +71,8 @@ public final class ReportedIssueVerifier {
 		LabPack control = corpus.control();
 		if (control == null) throw new IllegalStateException("1.8.9 vanilla control is required for item-model checks");
 		verifyItemDefinitionRouting(control);
+		verifyPotionLayers(control);
+		verifyPotionLayers(bdcraft);
 		verifyItemHandTransforms(control);
 		verifyMissingLegacyItemWrapper(bdcraft);
 		verifyInheritedCustomItemTransforms(bdcraft);
@@ -108,6 +110,35 @@ public final class ReportedIssueVerifier {
 		verifyDragonFireballAnimation(frozen);
 		verifyLegacyAnimationMetadata(eum3);
 		System.out.println("Verified reported custom-model regressions against " + bdcraft.name());
+	}
+
+	private static void verifyPotionLayers(LabPack pack) {
+		for (String stem : List.of("potion", "splash_potion")) {
+			JsonObject model = model(pack, "models/item/" + stem + ".json");
+			JsonObject textures = model.getAsJsonObject("textures");
+			if (textures == null
+				|| !textures.has("layer0") || !textures.get("layer0").getAsString().endsWith("item/potion_overlay")
+				|| !textures.has("layer1") || !textures.get("layer1").getAsString().endsWith("item/" + stem)) {
+				throw new IllegalStateException(stem + " did not retain the legacy overlay/bottle layer split: " + model);
+			}
+
+			JsonObject definition = model(pack, "items/" + stem + ".json");
+			JsonObject selected = definition.getAsJsonObject("model");
+			if (selected == null || !selected.has("tints")
+				|| selected.getAsJsonArray("tints").isEmpty()
+				|| !"minecraft:potion".equals(selected.getAsJsonArray("tints").get(0)
+					.getAsJsonObject().get("type").getAsString())) {
+				throw new IllegalStateException(stem + " lost its data-driven potion tint: " + definition);
+			}
+
+			if (!pack.listedPaths("models").contains("models/item/" + stem + ".json")
+				|| !pack.listedPaths("items").contains("items/" + stem + ".json")) {
+				throw new IllegalStateException(stem + " model or item definition was served but not announced");
+			}
+		}
+		if (!pack.listedPaths("textures/item").contains("textures/item/potion_overlay.png")) {
+			throw new IllegalStateException("Potion overlay texture was served but not announced");
+		}
 	}
 
 	private static void verifyLegacyAnimationMetadata(LabPack pack) {

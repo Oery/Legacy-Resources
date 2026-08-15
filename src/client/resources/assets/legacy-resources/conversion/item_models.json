@@ -34,6 +34,8 @@
   "crimson_trapdoor": "trapdoor",
   "warped_trapdoor": "trapdoor",
   "pale_oak_trapdoor": "trapdoor",
+  "potion": "bottle_drinkable",
+  "splash_potion": "bottle_splash",
   "slime_block": "slime",
   "snow_block": "snow",
   "stone_bricks": "stonebrick",
