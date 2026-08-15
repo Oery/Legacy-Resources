@@ -64,6 +64,9 @@ public final class ReportedIssueVerifier {
 		LabPack eum3 = corpus.packs().stream()
 			.filter(pack -> pack.name().toLowerCase().contains("eum3 blue revamp")).findFirst()
 			.orElseThrow(() -> new IllegalStateException("EUM3 Blue Revamp is required for this regression check"));
+		LabPack frozen = corpus.packs().stream()
+			.filter(pack -> pack.name().toLowerCase().contains("frozen")).findFirst()
+			.orElseThrow(() -> new IllegalStateException("Frozen is required for this regression check"));
 		LabPack control = corpus.control();
 		if (control == null) throw new IllegalStateException("1.8.9 vanilla control is required for item-model checks");
 		verifyItemDefinitionRouting(control);
@@ -94,6 +97,7 @@ public final class ReportedIssueVerifier {
 		verifyPlayerSkins(bdcraft);
 		verifyTripwire(bdcraft);
 		verifyBeaconBeam(bdcraft);
+		verifyDragonFireballAnimation(frozen);
 		verifyLegacyAnimationMetadata(eum3);
 		System.out.println("Verified reported custom-model regressions against " + bdcraft.name());
 	}
@@ -579,9 +583,23 @@ public final class ReportedIssueVerifier {
 
 	private static void verifyBeaconBeam(LabPack pack) {
 		var beam = pack.texture("entity/beacon/beacon_beam").orElseThrow(() -> new IllegalStateException("Legacy beacon beam did not resolve"));
+		int darkest = 255, brightest = 0;
 		for (int pixel : beam.getRGB(0, 0, beam.getWidth(), beam.getHeight(), null, 0, beam.getWidth())) {
 			if ((pixel >>> 24) != 255) throw new IllegalStateException("Beacon beam still contains transparent-black background pixels");
+			int luminance = (((pixel >>> 16) & 255) * 54 + ((pixel >>> 8) & 255) * 183 + (pixel & 255) * 19) / 256;
+			darkest = Math.min(darkest, luminance);
+			brightest = Math.max(brightest, luminance);
 		}
+		if (darkest < 128) throw new IllegalStateException("Beacon beam conversion left a black background");
+		if (brightest - darkest < 48) throw new IllegalStateException("Beacon beam conversion erased the pack's pattern");
+	}
+
+	private static void verifyDragonFireballAnimation(LabPack pack) {
+		var source = pack.texture("item/fire_charge").orElseThrow(() -> new IllegalStateException("Frozen fire charge did not resolve"));
+		if (source.getHeight() <= source.getWidth()) throw new IllegalStateException("Frozen fire charge is no longer an animation strip");
+		var fireball = pack.texture("entity/enderdragon/dragon_fireball").orElseThrow(() -> new IllegalStateException("Frozen dragon fireball did not resolve"));
+		if (fireball.getWidth() != fireball.getHeight()) throw new IllegalStateException("Direct-rendered dragon fireball retained its animation strip");
+		if (pack.resolves("textures/entity/enderdragon/dragon_fireball.png.mcmeta")) throw new IllegalStateException("Direct-rendered dragon fireball still advertises animation metadata");
 	}
 
 	private static void verifyHue(java.awt.image.BufferedImage image, double min, double max, String name) {

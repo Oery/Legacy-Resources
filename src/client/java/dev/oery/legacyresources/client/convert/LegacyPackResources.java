@@ -1063,11 +1063,28 @@ public final class LegacyPackResources implements PackResources {
 			BufferedImage image = ImageIO.read(in);
 			if (image == null) return null;
 			int[] pixels = Ops.pixels(image);
-			long red = 0, green = 0, blue = 0, count = 0;
-			for (int pixel : pixels) if (Ops.alpha(pixel) != 0) { red += Ops.red(pixel); green += Ops.green(pixel); blue += Ops.blue(pixel); count++; }
-			if (count == 0) return null;
-			int fill = Ops.argb(255, (int) (red / count), (int) (green / count), (int) (blue / count));
-			for (int i = 0; i < pixels.length; i++) if (Ops.alpha(pixels[i]) == 0) pixels[i] = fill;
+			long red = 0, green = 0, blue = 0, visible = 0;
+			for (int pixel : pixels) if (Ops.alpha(pixel) != 0) {
+				red += Ops.red(pixel);
+				green += Ops.green(pixel);
+				blue += Ops.blue(pixel);
+				visible++;
+			}
+			if (visible == 0) return null;
+			// The opaque pass needs a real beam surface behind transparent legacy artwork. Three
+			// quarters of the authored foreground colour lands in vanilla's current beam-value range
+			// while leaving enough contrast for glyphs such as PureBDcraft's white lightning.
+			int backgroundRed = (int) (red * 3 / (visible * 4));
+			int backgroundGreen = (int) (green * 3 / (visible * 4));
+			int backgroundBlue = (int) (blue * 3 / (visible * 4));
+			for (int i = 0; i < pixels.length; i++) {
+				int alpha = Ops.alpha(pixels[i]);
+				pixels[i] = Ops.argb(255,
+					(Ops.red(pixels[i]) * alpha + backgroundRed * (255 - alpha)) / 255,
+					(Ops.green(pixels[i]) * alpha + backgroundGreen * (255 - alpha)) / 255,
+					(Ops.blue(pixels[i]) * alpha + backgroundBlue * (255 - alpha)) / 255
+				);
+			}
 			BufferedImage opaque = Ops.image(pixels, image.getWidth(), image.getHeight());
 			ByteArrayOutputStream out = new ByteArrayOutputStream();
 			ImageIO.write(opaque, "png", out);
@@ -1082,7 +1099,10 @@ public final class LegacyPackResources implements PackResources {
 	private @Nullable IoSupplier<InputStream> resolveDerivedTextureMetadata(String path) {
 		String output = path.substring(TEXTURE_DIR.length(), path.length() - ".png.mcmeta".length());
 		Derivation derivation = Derivations.byOutput(output);
-		if (derivation == null || derivedTexture(output) == null) return null;
+		// Entity renderers bind a complete image directly instead of loading it through a sprite atlas,
+		// so they cannot consume .mcmeta animation. Their derived image is frame zero (see
+		// outputFollowsAnimation) and must not advertise metadata for frames it no longer contains.
+		if (output.startsWith("entity/") || derivation == null || derivedTexture(output) == null) return null;
 		String source = derivation.animationSource(output);
 		if (source == null) {
 			source = derivation.sources().stream().filter(this::sourceHasAnimationMetadata).findFirst().orElse(null);
@@ -1190,6 +1210,9 @@ public final class LegacyPackResources implements PackResources {
 	}
 
 	private boolean outputFollowsAnimation(Derivation derivation, String output, Map<String, BufferedImage> sources) {
+		// These are uploaded as direct renderer textures, not atlas sprites. A stacked strip would be
+		// sampled in full as one squashed image because the renderer never reads animation metadata.
+		if (output.startsWith("entity/")) return false;
 		String source = derivation.animationSource(output);
 		if (source != null) {
 			BufferedImage image = sources.get(source);
