@@ -503,6 +503,7 @@ public final class ReportedIssueVerifier {
 	private static void verifySigns(LabPack pack) {
 		var oakBlock = pack.texture("block/oak_sign").orElseThrow(() -> new IllegalStateException("Missing derived oak sign"));
 		var oakItem = pack.texture("item/oak_sign").orElseThrow(() -> new IllegalStateException("Missing derived oak sign item"));
+		var oakGui = pack.texture("gui/signs/oak").orElseThrow(() -> new IllegalStateException("Missing derived oak sign editor texture"));
 		for (String wood : List.of("oak", "spruce", "birch", "jungle", "acacia", "dark_oak", "mangrove", "cherry", "crimson", "warped", "pale_oak")) {
 			var sign = pack.texture("block/" + wood + "_sign").orElseThrow(() -> new IllegalStateException("Missing derived " + wood + " sign"));
 			if (sign.getWidth() != sign.getHeight() || sign.getWidth() % 32 != 0) throw new IllegalStateException("Invalid sign UV canvas for " + wood);
@@ -514,6 +515,29 @@ public final class ReportedIssueVerifier {
 			if (!pack.listedPaths("textures/item").contains("textures/item/" + wood + "_sign.png")) throw new IllegalStateException("Item atlas did not announce " + wood + " sign");
 			if (!sameAlpha(item, oakItem)) throw new IllegalStateException("Sign item silhouette changed for " + wood);
 			if (!wood.equals("oak") && samePixels(item, oakItem)) throw new IllegalStateException("Sign item still uses oak colours for " + wood);
+			var gui = pack.texture("gui/signs/" + wood).orElseThrow(() -> new IllegalStateException("Missing derived " + wood + " sign editor texture"));
+			if (gui.getWidth() % 24 != 0 || gui.getHeight() * 24 != gui.getWidth() * 26) throw new IllegalStateException("Invalid sign editor canvas for " + wood);
+			if (!pack.listedPaths("textures/gui/signs").contains("textures/gui/signs/" + wood + ".png")) throw new IllegalStateException("Sign editor texture was not announced for " + wood);
+			if (!sameAlpha(gui, oakGui)) throw new IllegalStateException("Sign editor silhouette changed for " + wood);
+			if (!wood.equals("oak") && samePixels(gui, oakGui)) throw new IllegalStateException("Sign editor still uses oak colours for " + wood);
+			verifySignEditorTexture(sign, gui, wood);
+		}
+	}
+
+	private static void verifySignEditorTexture(BufferedImage block, BufferedImage gui, String wood) {
+		int scale = block.getWidth() / 32;
+		if (gui.getWidth() != 24 * scale || gui.getHeight() != 26 * scale) {
+			throw new IllegalStateException("Sign editor resolution does not follow the block texture for " + wood);
+		}
+		for (int y = 0; y < gui.getHeight(); y++) for (int x = 0; x < gui.getWidth(); x++) {
+			int expected = y < 12 * scale
+				? block.getRGB(x, y + 2 * scale)
+				: x >= 11 * scale && x < 13 * scale
+					? block.getRGB(x + 17 * scale, y - 12 * scale)
+					: 0;
+			if (gui.getRGB(x, y) != expected) {
+				throw new IllegalStateException("Sign editor texture does not match the flattened block UVs for " + wood);
+			}
 		}
 	}
 

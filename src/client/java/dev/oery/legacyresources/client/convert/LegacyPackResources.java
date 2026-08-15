@@ -61,6 +61,8 @@ public final class LegacyPackResources implements PackResources {
 	private static final String OLD_BLOCK_TEXTURE_DIR = "textures/blocks/";
 	private static final String NEW_ITEM_TEXTURE_DIR = "textures/item/";
 	private static final String OLD_ITEM_TEXTURE_DIR = "textures/items/";
+	private static final String GUI_SIGN_TEXTURE_ROOT = "textures/gui/signs";
+	private static final String GUI_SIGN_TEXTURE_DIR = GUI_SIGN_TEXTURE_ROOT + "/";
 	private static final String NEW_EQUIPMENT_TEXTURE_DIR = "textures/entity/equipment/";
 	private static final String OLD_ARMOR_TEXTURE_DIR = "textures/models/armor/";
 	private static final String OVERLAY_SUFFIX = "_overlay";
@@ -489,6 +491,10 @@ public final class LegacyPackResources implements PackResources {
 				return resolveJson(location, () -> computeGuiSprite(spriteName, crop));
 			}
 		}
+		if (path.startsWith(GUI_SIGN_TEXTURE_DIR)) {
+			IoSupplier<InputStream> direct = delegate.getResource(PackType.CLIENT_RESOURCES, location);
+			return direct != null ? direct : resolveDerivedTexture(path);
+		}
 		// Derivation is the last resort in each of these branches, reached only once the pack has been
 		// found to have nothing of its own that maps to the requested texture - a pack that ships the
 		// file is never second-guessed.
@@ -834,6 +840,10 @@ public final class LegacyPackResources implements PackResources {
 			});
 			// Deliberately no early return: a legacy pack has nothing of its own under this path
 			// today, but swallowing the query outright would silently drop anything it did ship.
+		}
+		if (namespace.equals("minecraft")
+			&& (isOrUnder(directory, GUI_SIGN_TEXTURE_ROOT) || directoryCovers(directory, GUI_SIGN_TEXTURE_ROOT))) {
+			announceDerivedTextures(namespace, "gui/signs/", output);
 		}
 		delegate.listResources(type, namespace, directory, (id, supplier) -> {
 			// Everything left is passed through as the pack shipped it, bar the cloud sheet, which
@@ -1282,8 +1292,12 @@ public final class LegacyPackResources implements PackResources {
 					continue;
 				}
 				Identifier id = Identifier.fromNamespaceAndPath(namespace, TEXTURE_DIR + texturePath + ".png");
-				// The pack's own art wins, and the delegate listing has already announced it.
-				if (resolveTexture(id, id.getPath()) != null) {
+				// The pack's own art wins, and the delegate listing has already announced it. Block and
+				// item paths need legacy-name translation; direct-rendered families such as GUI signs do not.
+				boolean directFamily = !texturePath.startsWith("block/") && !texturePath.startsWith("item/");
+				if (directFamily
+					? delegate.getResource(PackType.CLIENT_RESOURCES, id) != null
+					: resolveTexture(id, id.getPath()) != null) {
 					continue;
 				}
 				byte[] bytes = derivedTexture(texturePath);

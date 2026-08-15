@@ -5,14 +5,18 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/** Re-packs the classic 64×32 sign UV sheet into current 32×32 sign-model UVs. */
+/** Re-packs the classic 64×32 sign UV sheet into current block-model and editor textures. */
 final class Signs implements Derivation {
 	private static final String SHEET = "entity/sign";
 	private static final String ITEM = "item/sign";
+	private static final String BLOCK_OUTPUT = "block/oak_sign";
+	private static final String ITEM_OUTPUT = "item/oak_sign";
+	private static final String GUI_OUTPUT = "gui/signs/oak";
 
 	@Override public String id() { return "signs"; }
 	@Override public List<String> sources() { return List.of(SHEET, ITEM); }
-	@Override public List<String> outputs() { return List.of("block/oak_sign", "item/oak_sign"); }
+	@Override public List<String> outputs() { return List.of(BLOCK_OUTPUT, ITEM_OUTPUT, GUI_OUTPUT); }
+	@Override public String animationSource(String output) { return output.equals(ITEM_OUTPUT) ? ITEM : SHEET; }
 	@Override public List<Param> params() { return List.of(); }
 	@Override public Map<String, BufferedImage> derive(Map<String, BufferedImage> sources, Params params) {
 		Map<String, BufferedImage> out = new LinkedHashMap<>();
@@ -20,9 +24,21 @@ final class Signs implements Derivation {
 		BufferedImage item = sources.get(ITEM);
 		if (sheet != null) {
 			BufferedImage sign = repack(sheet);
-			if (sign != null) out.put("block/oak_sign", sign);
+			if (sign != null) {
+				out.put(BLOCK_OUTPUT, sign);
+				out.put(GUI_OUTPUT, editorTexture(sign));
+			}
 		}
-		if (item != null) out.put("item/oak_sign", Ops.copy(item));
+		if (item != null) out.put(ITEM_OUTPUT, Ops.copy(item));
+		return out;
+	}
+
+	/** Flattens the south-facing board and post exactly as the modern sign-edit screen expects. */
+	static BufferedImage editorTexture(BufferedImage block) {
+		int scale = block.getWidth() / 32;
+		BufferedImage out = Ops.blank(24 * scale, 26 * scale);
+		copy(block, out, scale, 0, 2, 24, 14, 0, 0, 24, 12);
+		copy(block, out, scale, 28, 0, 30, 14, 11, 12, 13, 26);
 		return out;
 	}
 

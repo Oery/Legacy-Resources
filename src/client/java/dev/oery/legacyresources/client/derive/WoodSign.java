@@ -29,6 +29,7 @@ final class WoodSign implements Derivation {
 	private final String log;
 	private final String blockOutput;
 	private final String itemOutput;
+	private final String guiOutput;
 
 	WoodSign(String wood, String log) {
 		this.wood = wood;
@@ -36,11 +37,12 @@ final class WoodSign implements Derivation {
 		this.log = "block/" + log;
 		blockOutput = "block/" + wood + "_sign";
 		itemOutput = "item/" + wood + "_sign";
+		guiOutput = "gui/signs/" + wood;
 	}
 
 	@Override public String id() { return wood + "_signs"; }
 	@Override public List<String> sources() { return List.of(OAK_BLOCK, OAK_ITEM, OAK_PLANKS, planks, OAK_LOG, log); }
-	@Override public List<String> outputs() { return List.of(blockOutput, itemOutput); }
+	@Override public List<String> outputs() { return List.of(blockOutput, itemOutput, guiOutput); }
 	@Override public String animationSource(String output) { return output.equals(itemOutput) ? OAK_ITEM : OAK_BLOCK; }
 
 	@Override
@@ -84,9 +86,11 @@ final class WoodSign implements Derivation {
 		int postStart = 28 * source.getWidth() / 32;
 		BufferedImage board = masked(source, (x, y) -> x < postStart);
 		BufferedImage post = masked(source, (x, y) -> x >= postStart);
-		out.put(blockOutput, combine(
+		BufferedImage block = combine(
 			repaint(board, oakPlanks, woodPlanks, params), repaint(post, oakLog, woodLog, params)
-		));
+		);
+		out.put(blockOutput, block);
+		out.put(guiOutput, Signs.editorTexture(block));
 	}
 
 	private void deriveItem(@Nullable BufferedImage source, Band oakPlanks, Band woodPlanks,
