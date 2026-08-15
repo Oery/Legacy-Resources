@@ -96,6 +96,10 @@ public final class ReportedIssueVerifier {
 		verifyChestConversion(bdcraft);
 		verifyLegacyVariants(bdcraft);
 		verifyVariantRecolours(bdcraft);
+		verifyLeatherHorseArmorLayers(control);
+		verifyLeatherHorseArmorLayers(bdcraft);
+		verifyRemainingDerivations(control);
+		verifyRemainingDerivations(bdcraft);
 		verifyRailSlopeModels(bdcraft);
 		verifySigns(bdcraft);
 		verifyPlayerSkins(bdcraft);
@@ -605,7 +609,8 @@ public final class ReportedIssueVerifier {
 			"item/glow_ink_sac", "item/glow_item_frame", "block/glow_item_frame",
 			"entity/squid/glow_squid", "entity/squid/glow_squid_baby",
 			"entity/cow/mooshroom_brown", "entity/cow/mooshroom_brown_baby",
-			"item/leather_horse_armor", "item/netherite_horse_armor", "entity/horse/armor/horse_armor_leather",
+			"item/leather_horse_armor", "item/leather_horse_armor_overlay", "item/netherite_horse_armor",
+			"entity/horse/armor/horse_armor_leather", "entity/horse/armor/horse_armor_leather_overlay",
 			"entity/horse/armor/horse_armor_netherite", "block/copper_trapdoor", "block/nether_gold_ore"
 		)) {
 			if (pack.texture(texture).isEmpty()) {
@@ -623,6 +628,72 @@ public final class ReportedIssueVerifier {
 			if ((pixel >>> 24) != 0 && ((pixel >>> 16) & 255) < 55 && ((pixel >>> 8) & 255) < 55 && (pixel & 255) < 55) darkPetals++;
 		}
 		if (darkPetals == 0) throw new IllegalStateException("Derived wither rose contains no dark bloom pixels");
+	}
+
+	private static void verifyLeatherHorseArmorLayers(LabPack pack) {
+		BufferedImage itemBase = pack.texture("item/leather_horse_armor").orElseThrow();
+		BufferedImage itemOverlay = pack.texture("item/leather_horse_armor_overlay").orElseThrow();
+		BufferedImage bodyBase = pack.texture("entity/horse/armor/horse_armor_leather").orElseThrow();
+		BufferedImage bodyOverlay = pack.texture("entity/horse/armor/horse_armor_leather_overlay").orElseThrow();
+		for (BufferedImage base : List.of(itemBase, bodyBase)) {
+			for (int pixel : base.getRGB(0, 0, base.getWidth(), base.getHeight(), null, 0, base.getWidth())) {
+				if ((pixel >>> 24) != 0 && (((pixel >>> 16) & 255) != ((pixel >>> 8) & 255) || ((pixel >>> 8) & 255) != (pixel & 255))) {
+					throw new IllegalStateException(pack.name() + " leather horse armour bakes colour into its dyeable base");
+				}
+			}
+		}
+		verifyHue(itemOverlay, .035, .12, pack.name() + " leather horse armour item overlay");
+		verifyHue(bodyOverlay, .035, .12, pack.name() + " leather horse armour body overlay");
+		if (!pack.listedPaths("textures/item").contains("textures/item/leather_horse_armor.png")
+			|| !pack.listedPaths("textures/item").contains("textures/item/leather_horse_armor_overlay.png")) {
+			throw new IllegalStateException(pack.name() + " does not announce both leather horse armour item layers");
+		}
+		verifyLeatherBandsOverlap(pack.name(), itemBase, itemOverlay);
+		verifyLeatherBandsOverlap(pack.name(), bodyBase, bodyOverlay);
+	}
+
+	private static void verifyLeatherBandsOverlap(String pack, BufferedImage base, BufferedImage overlay) {
+		int baseMin = 255, baseMax = 0, overlayMin = 255, overlayMax = 0;
+		for (int pixel : base.getRGB(0, 0, base.getWidth(), base.getHeight(), null, 0, base.getWidth())) {
+			if ((pixel >>> 24) == 0) continue;
+			int grey = pixel & 255;
+			int tinted = (int) Math.round(grey * .2126 * 160 / 255 + grey * .7152 * 101 / 255 + grey * .0722 * 64 / 255);
+			baseMin = Math.min(baseMin, tinted);
+			baseMax = Math.max(baseMax, tinted);
+		}
+		for (int pixel : overlay.getRGB(0, 0, overlay.getWidth(), overlay.getHeight(), null, 0, overlay.getWidth())) {
+			if ((pixel >>> 24) == 0) continue;
+			int luminance = (int) Math.round(.2126 * ((pixel >>> 16) & 255) + .7152 * ((pixel >>> 8) & 255) + .0722 * (pixel & 255));
+			overlayMin = Math.min(overlayMin, luminance);
+			overlayMax = Math.max(overlayMax, luminance);
+		}
+		if (baseMin > overlayMax || overlayMin > baseMax) {
+			throw new IllegalStateException(pack + " leather horse armour base and overlay shading do not overlap");
+		}
+	}
+
+	private static void verifyRemainingDerivations(LabPack pack) {
+		List<String> blocks = List.of(
+			"rooted_dirt", "cobbled_deepslate", "polished_deepslate", "deepslate_bricks",
+			"cracked_deepslate_bricks", "deepslate_tiles", "cracked_deepslate_tiles", "chiseled_deepslate",
+			"blackstone", "blackstone_top", "polished_blackstone", "polished_blackstone_bricks",
+			"cracked_polished_blackstone_bricks", "chiseled_polished_blackstone", "gilded_blackstone", "magma"
+		);
+		Set<String> listedBlocks = pack.listedPaths("textures/block");
+		for (String stem : blocks) {
+			BufferedImage texture = pack.texture("block/" + stem)
+				.orElseThrow(() -> new IllegalStateException(pack.name() + " is missing derived block " + stem));
+			if (texture.getWidth() < 16 || texture.getWidth() % 16 != 0 || texture.getHeight() % texture.getWidth() != 0) {
+				throw new IllegalStateException(pack.name() + " derived an invalid " + stem + " canvas");
+			}
+			if (!listedBlocks.contains("textures/block/" + stem + ".png")) {
+				throw new IllegalStateException(pack.name() + " does not announce derived block " + stem);
+			}
+		}
+		BufferedImage magma = pack.texture("block/magma").orElseThrow();
+		if (magma.getHeight() <= magma.getWidth() || !pack.resolves("textures/block/magma.png.mcmeta")) {
+			throw new IllegalStateException(pack.name() + " magma does not follow its lava animation");
+		}
 	}
 
 	private static void verifyRailSlopeModels(LabPack pack) {

@@ -27,6 +27,11 @@ final class ClassicHorseArmorLayer extends RenderLayer<HorseRenderState, Classic
 		if (texture == null || state.isInvisible) return;
 		collector.order(2).submitModel(armorModel, state, pose, RenderTypes.entityCutout(texture), light,
 			LivingEntityRenderer.getOverlayCoords(state, 0), color(state.bodyArmorItem), null, state.outlineColor, (ModelFeatureRenderer.CrumblingOverlay)null);
+		if (state.bodyArmorItem.is(Items.LEATHER_HORSE_ARMOR)) {
+			Identifier overlay = Identifier.withDefaultNamespace("textures/entity/horse/armor/horse_armor_leather_overlay.png");
+			collector.order(3).submitModel(armorModel, state, pose, RenderTypes.entityCutout(overlay), light,
+				LivingEntityRenderer.getOverlayCoords(state, 0), -1, null, state.outlineColor, (ModelFeatureRenderer.CrumblingOverlay)null);
+		}
 	}
 
 	private static Identifier texture(ItemStack armor) {
