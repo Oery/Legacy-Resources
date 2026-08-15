@@ -6,6 +6,7 @@ import com.google.gson.JsonParser;
 import com.mojang.serialization.JsonOps;
 import dev.oery.legacyresources.client.convert.LabPackAccess;
 import java.awt.Color;
+import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -500,11 +501,35 @@ public final class ReportedIssueVerifier {
 	}
 
 	private static void verifySigns(LabPack pack) {
+		var oakBlock = pack.texture("block/oak_sign").orElseThrow(() -> new IllegalStateException("Missing derived oak sign"));
+		var oakItem = pack.texture("item/oak_sign").orElseThrow(() -> new IllegalStateException("Missing derived oak sign item"));
 		for (String wood : List.of("oak", "spruce", "birch", "jungle", "acacia", "dark_oak", "mangrove", "cherry", "crimson", "warped", "pale_oak")) {
 			var sign = pack.texture("block/" + wood + "_sign").orElseThrow(() -> new IllegalStateException("Missing derived " + wood + " sign"));
 			if (sign.getWidth() != sign.getHeight() || sign.getWidth() % 32 != 0) throw new IllegalStateException("Invalid sign UV canvas for " + wood);
 			if (!pack.listedPaths("textures/block").contains("textures/block/" + wood + "_sign.png")) throw new IllegalStateException("Sign atlas did not announce " + wood);
+			if (!sameAlpha(sign, oakBlock)) throw new IllegalStateException("Sign UV silhouette changed for " + wood);
+			if (!wood.equals("oak") && samePixels(sign, oakBlock)) throw new IllegalStateException("Block sign still uses oak colours for " + wood);
+			var item = pack.texture("item/" + wood + "_sign").orElseThrow(() -> new IllegalStateException("Missing derived " + wood + " sign item"));
+			if (item.getWidth() != item.getHeight() || item.getWidth() % 16 != 0) throw new IllegalStateException("Invalid sign item canvas for " + wood);
+			if (!pack.listedPaths("textures/item").contains("textures/item/" + wood + "_sign.png")) throw new IllegalStateException("Item atlas did not announce " + wood + " sign");
+			if (!sameAlpha(item, oakItem)) throw new IllegalStateException("Sign item silhouette changed for " + wood);
+			if (!wood.equals("oak") && samePixels(item, oakItem)) throw new IllegalStateException("Sign item still uses oak colours for " + wood);
 		}
+	}
+
+	private static boolean sameAlpha(BufferedImage first, BufferedImage second) {
+		if (first.getWidth() != second.getWidth() || first.getHeight() != second.getHeight()) return false;
+		int[] a = first.getRGB(0, 0, first.getWidth(), first.getHeight(), null, 0, first.getWidth());
+		int[] b = second.getRGB(0, 0, second.getWidth(), second.getHeight(), null, 0, second.getWidth());
+		for (int i = 0; i < a.length; i++) if ((a[i] >>> 24) != (b[i] >>> 24)) return false;
+		return true;
+	}
+
+	private static boolean samePixels(BufferedImage first, BufferedImage second) {
+		if (first.getWidth() != second.getWidth() || first.getHeight() != second.getHeight()) return false;
+		int[] a = first.getRGB(0, 0, first.getWidth(), first.getHeight(), null, 0, first.getWidth());
+		int[] b = second.getRGB(0, 0, second.getWidth(), second.getHeight(), null, 0, second.getWidth());
+		return java.util.Arrays.equals(a, b);
 	}
 
 	private static void verifyPlayerSkins(LabPack pack) {

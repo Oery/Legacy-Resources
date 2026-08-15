@@ -9,13 +9,10 @@ import java.util.Map;
 final class Signs implements Derivation {
 	private static final String SHEET = "entity/sign";
 	private static final String ITEM = "item/sign";
-	private static final List<String> WOODS = List.of("oak", "spruce", "birch", "jungle", "acacia", "dark_oak", "mangrove", "cherry", "crimson", "warped", "pale_oak");
 
 	@Override public String id() { return "signs"; }
 	@Override public List<String> sources() { return List.of(SHEET, ITEM); }
-	@Override public List<String> outputs() {
-		return WOODS.stream().flatMap(wood -> java.util.stream.Stream.of("block/" + wood + "_sign", "item/" + wood + "_sign")).toList();
-	}
+	@Override public List<String> outputs() { return List.of("block/oak_sign", "item/oak_sign"); }
 	@Override public List<Param> params() { return List.of(); }
 	@Override public Map<String, BufferedImage> derive(Map<String, BufferedImage> sources, Params params) {
 		Map<String, BufferedImage> out = new LinkedHashMap<>();
@@ -23,9 +20,9 @@ final class Signs implements Derivation {
 		BufferedImage item = sources.get(ITEM);
 		if (sheet != null) {
 			BufferedImage sign = repack(sheet);
-			if (sign != null) WOODS.forEach(wood -> out.put("block/" + wood + "_sign", Ops.copy(sign)));
+			if (sign != null) out.put("block/oak_sign", sign);
 		}
-		if (item != null) WOODS.forEach(wood -> out.put("item/" + wood + "_sign", Ops.copy(item)));
+		if (item != null) out.put("item/oak_sign", Ops.copy(item));
 		return out;
 	}
 
