@@ -55,6 +55,7 @@ final class LegacyItemTransformConverter {
 		boolean unresolvedBlockParentIsGeometry = false;
 		boolean legacyDisplaySeen = false;
 		Geometry geometry = null;
+		Vector3f geometryCenter = new Vector3f();
 		for (int depth = 0; depth < MAX_PARENT_DEPTH; depth++) {
 			if (!visited.add(current)) {
 				return Result.failure("cyclic legacy parent chain at " + current);
@@ -104,6 +105,7 @@ final class LegacyItemTransformConverter {
 			JsonElement parent = model.get("parent");
 			if (elements != null) {
 				if (!elements.isJsonArray()) return Result.failure("elements is not an array in " + current);
+				if (geometry == null) geometryCenter = elementBoundsCenter(elements.getAsJsonArray());
 				geometry = Geometry.CUBOID_3D;
 			}
 			if (parent == null) {
@@ -150,7 +152,129 @@ final class LegacyItemTransformConverter {
 			if (invalid != null) return Result.failure(context.legacyName + ": " + invalid);
 			output.add(context.modernName, converted.toJson());
 		}
-		return Result.success(output, geometry);
+		return Result.success(output, geometry, geometryCenter);
+	}
+
+	private static Vector3f elementBoundsCenter(JsonArray elements) {
+		Vector3f min = new Vector3f(Float.POSITIVE_INFINITY);
+		Vector3f max = new Vector3f(Float.NEGATIVE_INFINITY);
+		boolean found = false;
+		for (JsonElement element : elements) {
+			if (!element.isJsonObject()) continue;
+			Vector3f from = elementVector(element.getAsJsonObject(), "from");
+			Vector3f to = elementVector(element.getAsJsonObject(), "to");
+			if (from == null || to == null) continue;
+			min.min(from).min(to);
+			max.max(from).max(to);
+			found = true;
+		}
+		return found ? min.add(max).mul(1.0f / 32.0f).sub(0.5f, 0.5f, 0.5f) : new Vector3f();
+	}
+
+	private static @Nullable Vector3f elementVector(JsonObject element, String key) {
+		JsonElement value = element.get(key);
+		if (value == null || !value.isJsonArray() || value.getAsJsonArray().size() != 3) return null;
+		try {
+			JsonArray values = value.getAsJsonArray();
+			Vector3f result = new Vector3f(values.get(0).getAsFloat(), values.get(1).getAsFloat(), values.get(2).getAsFloat());
+			return result.isFinite() ? result : null;
+		} catch (RuntimeException e) {
+			return null;
+		}
+	}
+
+	/**
+	 * Transfers a current model's explicit right-to-left handedness policy onto a converted legacy
+	 * right-hand pose. Current Minecraft mirrors a missing left transform automatically, which is
+	 * correct for generated items but turns tools and weapons around. Their explicit left transform
+	 * first cancels that automatic rotation mirror and may then add an item-specific adjustment (the
+	 * bow is the notable vanilla example).
+	 */
+	static @Nullable JsonObject deriveLeftHand(
+		JsonObject convertedRight, JsonObject modernRight, JsonObject modernLeft
+	) {
+		try {
+			ModernTransform pack = parseModern(convertedRight);
+			ModernTransform currentRight = parseModern(modernRight);
+			ModernTransform currentLeft = parseModern(modernLeft);
+			ModernTransform packBase = preMirror(pack);
+			ModernTransform currentBase = preMirror(currentRight);
+
+			Quaternionf policyRotation = new Quaternionf(currentLeft.rotation)
+				.mul(new Quaternionf(currentBase.rotation).conjugate()).normalize();
+			Quaternionf rotation = policyRotation.mul(packBase.rotation, new Quaternionf()).normalize();
+			Vector3f translation = new Vector3f(packBase.translation)
+				.add(new Vector3f(currentLeft.translation).sub(currentBase.translation));
+			Vector3f scale = new Vector3f();
+			for (int axis = 0; axis < 3; axis++) {
+				float base = currentBase.scale.get(axis);
+				if (Math.abs(base) < UNIFORM_EPSILON) return null;
+				scale.setComponent(axis, packBase.scale.get(axis) * currentLeft.scale.get(axis) / base);
+			}
+			Converted converted = new Converted(translation, rotation, scale);
+			return converted.invalidReason() == null ? converted.toJson() : null;
+		} catch (IllegalArgumentException e) {
+			return null;
+		}
+	}
+
+	/** Keeps custom cuboid geometry facing the same way after the renderer applies its left mirror. */
+	static @Nullable JsonObject deriveOrientationPreservingLeft(JsonObject convertedRight) {
+		try {
+			ModernTransform base = preMirror(parseModern(convertedRight));
+			Converted converted = new Converted(base.translation, base.rotation, base.scale);
+			return converted.invalidReason() == null ? converted.toJson() : null;
+		} catch (IllegalArgumentException e) {
+			return null;
+		}
+	}
+
+	/** Moves an asymmetric model so its visible bounds, rather than its JSON origin, mirror hands. */
+	static @Nullable JsonObject mirrorGeometryCenter(
+		JsonObject convertedRight, JsonObject convertedLeft, Vector3f geometryCenter
+	) {
+		try {
+			ModernTransform right = parseModern(convertedRight);
+			ModernTransform left = parseModern(convertedLeft);
+			Vector3f rightPoint = right.rotation.transform(
+				new Vector3f(geometryCenter).mul(right.scale), new Vector3f()
+			).add(right.translation);
+			Vector3f desiredLeftPoint = new Vector3f(-rightPoint.x, rightPoint.y, rightPoint.z);
+			Quaternionf appliedLeftRotation = preMirror(left).rotation;
+			Vector3f leftGeometry = appliedLeftRotation.transform(
+				new Vector3f(geometryCenter).mul(left.scale), new Vector3f()
+			);
+			Vector3f appliedTranslation = desiredLeftPoint.sub(leftGeometry);
+			Vector3f rawTranslation = new Vector3f(
+				-appliedTranslation.x, appliedTranslation.y, appliedTranslation.z
+			);
+			Converted converted = new Converted(rawTranslation, left.rotation, left.scale);
+			return converted.invalidReason() == null ? converted.toJson() : null;
+		} catch (IllegalArgumentException e) {
+			return null;
+		}
+	}
+
+	private static ModernTransform parseModern(JsonObject value) {
+		Vector3f euler = vector(value, "rotation", new Vector3f());
+		Vector3f translation = vector(value, "translation", new Vector3f()).mul(0.0625f);
+		Vector3f scale = vector(value, "scale", new Vector3f(1.0f));
+		if (!euler.isFinite() || !translation.isFinite() || !scale.isFinite()) {
+			throw new IllegalArgumentException("contains a non-finite number");
+		}
+		Quaternionf rotation = new Quaternionf().rotationXYZ(
+			euler.x * DEG_TO_RAD, euler.y * DEG_TO_RAD, euler.z * DEG_TO_RAD
+		);
+		return new ModernTransform(euler, translation, rotation, scale);
+	}
+
+	/** Raw left-hand JSON which cancels the renderer's automatic Y/Z rotation mirror. */
+	private static ModernTransform preMirror(ModernTransform transform) {
+		Vector3f euler = new Vector3f(transform.euler.x, -transform.euler.y, -transform.euler.z);
+		Quaternionf rotation = new Quaternionf().rotationXYZ(
+			euler.x * DEG_TO_RAD, euler.y * DEG_TO_RAD, euler.z * DEG_TO_RAD
+		);
+		return new ModernTransform(euler, new Vector3f(transform.translation), rotation, new Vector3f(transform.scale));
 	}
 
 	private static LegacyTransform parse(@Nullable JsonObject value) {
@@ -236,17 +360,18 @@ final class LegacyItemTransformConverter {
 		}
 	}
 
-	record Result(@Nullable JsonObject display, @Nullable Geometry geometry, @Nullable String failure, boolean alreadyModern) {
-		static Result success(JsonObject display, Geometry geometry) {
-			return new Result(display, geometry, null, false);
+	record Result(@Nullable JsonObject display, @Nullable Geometry geometry, @Nullable Vector3f geometryCenter,
+		@Nullable String failure, boolean alreadyModern) {
+		static Result success(JsonObject display, Geometry geometry, Vector3f geometryCenter) {
+			return new Result(display, geometry, new Vector3f(geometryCenter), null, false);
 		}
 
 		static Result modernResult() {
-			return new Result(null, null, null, true);
+			return new Result(null, null, null, null, true);
 		}
 
 		static Result failure(String failure) {
-			return new Result(null, null, failure, false);
+			return new Result(null, null, null, failure, false);
 		}
 
 		boolean succeeded() {
@@ -255,6 +380,9 @@ final class LegacyItemTransformConverter {
 	}
 
 	private record LegacyTransform(Vector3f translation, Quaternionf rotation, Vector3f scale) {
+	}
+
+	private record ModernTransform(Vector3f euler, Vector3f translation, Quaternionf rotation, Vector3f scale) {
 	}
 
 	private record Bridge(Vector3f translation, Quaternionf rotation, float scale, float postScale) {

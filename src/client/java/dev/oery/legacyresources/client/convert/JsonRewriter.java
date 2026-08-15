@@ -5,6 +5,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
 import java.util.Map;
+import java.util.Set;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -47,6 +48,35 @@ final class JsonRewriter {
 		model.addProperty("parent", parent);
 		model.add(DISPLAY_KEY, display);
 		return model;
+	}
+
+	/**
+	 * Legacy's item renderer drew custom model quads two-sided. Modern item rendering culls their back
+	 * faces, so a torch flame plane authored with only one face disappears from half the viewpoints.
+	 * Copy only faces using the requested texture binding; other deliberately open geometry remains
+	 * untouched.
+	 */
+	static void addMissingOppositeFaces(JsonObject model, String texture) {
+		JsonElement elements = model.get("elements");
+		if (elements == null || !elements.isJsonArray()) return;
+		Map<String, String> opposites = Map.of(
+			"down", "up", "up", "down", "north", "south", "south", "north", "west", "east", "east", "west"
+		);
+		for (JsonElement element : elements.getAsJsonArray()) {
+			if (!element.isJsonObject()) continue;
+			JsonElement facesElement = element.getAsJsonObject().get("faces");
+			if (facesElement == null || !facesElement.isJsonObject()) continue;
+			JsonObject faces = facesElement.getAsJsonObject();
+			for (Map.Entry<String, JsonElement> face : Set.copyOf(faces.entrySet())) {
+				if (!face.getValue().isJsonObject() || !opposites.containsKey(face.getKey())) continue;
+				JsonElement binding = face.getValue().getAsJsonObject().get("texture");
+				String opposite = opposites.get(face.getKey());
+				if (binding != null && binding.isJsonPrimitive() && texture.equals(binding.getAsString())
+					&& !faces.has(opposite)) {
+					faces.add(opposite, face.getValue().deepCopy());
+				}
+			}
+		}
 	}
 
 	/** Repoints a vanilla block-item definition at the converted legacy item wrapper. */

@@ -42,6 +42,7 @@ import net.minecraft.server.packs.metadata.pack.PackFormat;
 import net.minecraft.server.packs.metadata.pack.PackMetadataSection;
 import net.minecraft.server.packs.resources.IoSupplier;
 import net.minecraft.util.InclusiveRange;
+import org.joml.Vector3f;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -2368,6 +2369,7 @@ public final class LegacyPackResources implements PackResources {
 			return null;
 		}
 		JsonObject model = JsonRewriter.rewrite(parsed).getAsJsonObject();
+		if (modernStem.endsWith("torch")) JsonRewriter.addMissingOppositeFaces(model, "#fire");
 		if (presentation.alreadyModern()) {
 			return validateRewrittenModel(location, model);
 		}
@@ -2383,6 +2385,10 @@ public final class LegacyPackResources implements PackResources {
 		}
 		model.remove("display");
 		JsonObject display = presentation.display();
+		addModernHandedness(display, location.getNamespace(), modernStem, "firstperson", presentation.geometry(),
+			presentation.geometryCenter());
+		addModernHandedness(display, location.getNamespace(), modernStem, "thirdperson", presentation.geometry(),
+			presentation.geometryCenter());
 		JsonElement shelf = modernItemDisplayContext(location.getNamespace(), modernStem, "on_shelf");
 		if (shelf != null) display.add("on_shelf", shelf);
 		model.add("display", display);
@@ -2424,6 +2430,58 @@ public final class LegacyPackResources implements PackResources {
 			current = Identifier.fromNamespaceAndPath(parentId.getNamespace(), MODEL_DIR + parentId.getPath() + JSON_SUFFIX);
 		}
 		return null;
+	}
+
+	private void addModernHandedness(
+		JsonObject display, String namespace, String stem, String context, LegacyItemTransformConverter.Geometry geometry,
+		Vector3f geometryCenter
+	) {
+		JsonElement convertedRight = display.get(context + "_righthand");
+		if (convertedRight == null || !convertedRight.isJsonObject()) return;
+		boolean asymmetricDoor = namespace.equals("minecraft") && stem.endsWith("_door");
+		HandednessPolicy policy = modernHandednessPolicy(namespace, stem, context);
+		JsonObject convertedLeft = asymmetricDoor && context.equals("firstperson")
+			? LegacyItemTransformConverter.deriveOrientationPreservingLeft(convertedRight.getAsJsonObject())
+			: policy != null
+			? LegacyItemTransformConverter.deriveLeftHand(
+				convertedRight.getAsJsonObject(), policy.right(), policy.left()
+			) : geometry == LegacyItemTransformConverter.Geometry.CUBOID_3D
+				&& (context.equals("firstperson") || stem.endsWith("torch"))
+				? LegacyItemTransformConverter.deriveOrientationPreservingLeft(convertedRight.getAsJsonObject()) : null;
+		if (convertedLeft == null && asymmetricDoor) {
+			convertedLeft = convertedRight.getAsJsonObject().deepCopy();
+		}
+		if (convertedLeft != null && asymmetricDoor) {
+			JsonObject centered = LegacyItemTransformConverter.mirrorGeometryCenter(
+				convertedRight.getAsJsonObject(), convertedLeft, geometryCenter
+			);
+			if (centered != null) convertedLeft = centered;
+		}
+		if (convertedLeft != null) display.add(context + "_lefthand", convertedLeft);
+	}
+
+	private @Nullable HandednessPolicy modernHandednessPolicy(String namespace, String stem, String context) {
+		JsonElement itemRight = modernItemDisplayContext(namespace, stem, context + "_righthand");
+		JsonElement itemLeft = modernItemDisplayContext(namespace, stem, context + "_lefthand");
+		if (itemRight != null && itemRight.isJsonObject() && itemLeft != null && itemLeft.isJsonObject()) {
+			return new HandednessPolicy(itemRight.getAsJsonObject(), itemLeft.getAsJsonObject());
+		}
+		String blockParent = directBlockItemModel(namespace, stem);
+		// Current doors are flat generated items, but legacy packs can replace them with the hinged,
+		// edge-aligned block geometry. That geometry needs the same left-hand policy as other thin
+		// blocks; the centered-cuboid fallback used by torches leaves its hinge on the wrong side.
+		if (blockParent == null && namespace.equals("minecraft") && stem.endsWith("_door")) {
+			blockParent = "minecraft:block/thin_block";
+		}
+		if (blockParent == null) return null;
+		JsonObject display = modernModelDisplay(blockParent);
+		JsonElement blockRight = display != null ? display.get(context + "_righthand") : null;
+		JsonElement blockLeft = display != null ? display.get(context + "_lefthand") : null;
+		return blockRight != null && blockRight.isJsonObject() && blockLeft != null && blockLeft.isJsonObject()
+			? new HandednessPolicy(blockRight.getAsJsonObject(), blockLeft.getAsJsonObject()) : null;
+	}
+
+	private record HandednessPolicy(JsonObject right, JsonObject left) {
 	}
 
 	/** Rebinds a custom held-torch model to the matching synthesized soul-torch parent. */
@@ -2619,6 +2677,7 @@ public final class LegacyPackResources implements PackResources {
 			return null;
 		}
 		JsonObject model = bedColor == null ? JsonRewriter.rewrite(parsed).getAsJsonObject() : JsonRewriter.rewriteBedModel(parsed, bedColor);
+		if (location.getPath().endsWith("torch_item.json")) JsonRewriter.addMissingOppositeFaces(model, "#fire");
 		if (outputStem != null) {
 			model = inlineRenamedSelfParent(location, outputStem, model);
 			if (model == null) return null;

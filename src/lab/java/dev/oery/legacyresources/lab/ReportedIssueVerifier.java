@@ -43,6 +43,7 @@ import net.minecraft.server.packs.repository.PackSource;
 import net.minecraft.server.packs.resources.MultiPackResourceManager;
 import net.minecraft.world.item.ItemDisplayContext;
 import org.joml.Matrix4f;
+import org.joml.Vector3f;
 
 /** Regression checks for the custom-model failures reported against PureBDcraft. */
 public final class ReportedIssueVerifier {
@@ -73,10 +74,13 @@ public final class ReportedIssueVerifier {
 		verifyItemHandTransforms(control);
 		verifyMissingLegacyItemWrapper(bdcraft);
 		verifyInheritedCustomItemTransforms(bdcraft);
+		verifyTorchFlameFaces(bdcraft);
 		verifyGameLoader(corpus, control, "stone", .25, .4);
 		verifyGameLoader(corpus, control, "torch", .5, .68);
 		verifyGameLoader(corpus, bdcraft, "stone", .25, .4);
 		verifyGameLoader(corpus, bdcraft, "torch", .375, .64);
+		verifyGameLoader(corpus, bdcraft, "diamond_hoe", .5, .68);
+		verifyGameLoader(corpus, bdcraft, "oak_door", .25, .24);
 		verifyLegacyBlockItemPresentation(bdcraft, "oak_fence", false);
 		verifyLegacyBlockItemPresentation(bdcraft, "oak_trapdoor", true);
 		verifyLegacyBlockItemPresentation(bdcraft, "iron_trapdoor", true);
@@ -212,6 +216,35 @@ public final class ReportedIssueVerifier {
 		}
 	}
 
+	private static void verifyTorchFlameFaces(LabPack pack) {
+		JsonObject torch = model(pack, "models/block/torch_item.json");
+		int flameFaces = 0;
+		for (var element : torch.getAsJsonArray("elements")) {
+			JsonObject faces = element.getAsJsonObject().getAsJsonObject("faces");
+			if (faces == null) continue;
+			for (var face : faces.entrySet()) {
+				JsonObject definition = face.getValue().getAsJsonObject();
+				if (!definition.has("texture") || !"#fire".equals(definition.get("texture").getAsString())) continue;
+				flameFaces++;
+				String opposite = switch (face.getKey()) {
+					case "down" -> "up";
+					case "up" -> "down";
+					case "north" -> "south";
+					case "south" -> "north";
+					case "west" -> "east";
+					case "east" -> "west";
+					default -> null;
+				};
+				if (opposite == null || !faces.has(opposite)) {
+					throw new IllegalStateException("Torch item flame remains single-sided on " + face.getKey());
+				}
+			}
+		}
+		if (flameFaces != 4) {
+			throw new IllegalStateException("Expected four two-sided torch flame faces, found " + flameFaces);
+		}
+	}
+
 	private static void verifyLegacyBlockItemPresentation(LabPack pack, String stem, boolean trapdoor) {
 		JsonObject definition = model(pack, "items/" + stem + ".json");
 		if (!("minecraft:item/" + stem).equals(definition.getAsJsonObject("model").get("model").getAsString())) {
@@ -314,12 +347,107 @@ public final class ReportedIssueVerifier {
 			}
 			if (pack.name().toLowerCase().contains("purebdcraft") && stem.equals("torch")) {
 				verifyPureTorchMatrices(itemModel.getTopTransforms());
+				verifyOrientationPreservingOffhand("PureBDcraft torch", itemModel.getTopTransforms());
+			}
+			if (pack.name().toLowerCase().contains("purebdcraft") && stem.equals("diamond_hoe")) {
+				verifyOrientationPreservingOffhand("PureBDcraft diamond hoe", itemModel.getTopTransforms());
+			}
+			if (pack.name().toLowerCase().contains("purebdcraft") && stem.equals("oak_door")) {
+				verifyDoorGeometryCenter(pack, itemModel.getTopTransforms());
+			}
+			if (pack.name().toLowerCase().contains("purebdcraft") && stem.endsWith("trapdoor")) {
+				verifyThinBlockOffhand(stem, itemModel.getTopTransforms());
 			}
 		} finally {
 			// MultiPackResourceManager.close would also close the converted corpus pack, which is
 			// deliberately reused by the remaining checks in this short-lived verifier process.
 			modern.close();
 		}
+	}
+
+	private static void verifyOrientationPreservingOffhand(String label, ItemTransforms transforms) {
+		for (ItemDisplayContext rightContext : List.of(
+			ItemDisplayContext.FIRST_PERSON_RIGHT_HAND, ItemDisplayContext.THIRD_PERSON_RIGHT_HAND
+		)) {
+			ItemDisplayContext leftContext = rightContext == ItemDisplayContext.FIRST_PERSON_RIGHT_HAND
+				? ItemDisplayContext.FIRST_PERSON_LEFT_HAND : ItemDisplayContext.THIRD_PERSON_LEFT_HAND;
+			ItemTransform right = transforms.getTransform(rightContext);
+			ItemTransform left = transforms.getTransform(leftContext);
+			Matrix4f expected = new Matrix4f().translate(
+				-right.translation().x(), right.translation().y(), right.translation().z()
+			).rotateXYZ(rad(right.rotation().x()), rad(right.rotation().y()), rad(right.rotation().z()))
+				.scale(right.scale()).translate(-.5f, -.5f, -.5f);
+			assertMatrix(label + " " + leftContext.getSerializedName(), expected, modern(left, true));
+		}
+	}
+
+	private static void verifyDoorGeometryCenter(LabPack pack, ItemTransforms transforms) {
+		Vector3f center = modelBoundsCenter(model(pack, "models/block/wooden_door_bottom.json"));
+		for (ItemDisplayContext rightContext : List.of(
+			ItemDisplayContext.FIRST_PERSON_RIGHT_HAND, ItemDisplayContext.THIRD_PERSON_RIGHT_HAND
+		)) {
+			ItemDisplayContext leftContext = rightContext == ItemDisplayContext.FIRST_PERSON_RIGHT_HAND
+				? ItemDisplayContext.FIRST_PERSON_LEFT_HAND : ItemDisplayContext.THIRD_PERSON_LEFT_HAND;
+			Vector3f right = transformedPoint(transforms.getTransform(rightContext), false, center);
+			Vector3f left = transformedPoint(transforms.getTransform(leftContext), true, center);
+			Vector3f expected = new Vector3f(-right.x, right.y, right.z);
+			Matrix4f rightOrientation = transformedOrientation(transforms.getTransform(rightContext), false);
+			Matrix4f leftOrientation = transformedOrientation(transforms.getTransform(leftContext), true);
+			if (!rightOrientation.equals(leftOrientation, 3.0e-4f)) {
+				throw new IllegalStateException("PureBDcraft oak door " + leftContext.getSerializedName()
+					+ " changes the visible geometry orientation");
+			}
+			if (!expected.equals(left, 3.0e-4f)) {
+				throw new IllegalStateException("PureBDcraft oak door " + leftContext.getSerializedName()
+					+ " does not mirror the visible geometry center: expected=" + expected + ", actual=" + left);
+			}
+		}
+	}
+
+	private static Vector3f modelBoundsCenter(JsonObject model) {
+		JsonArray elements = model.getAsJsonArray("elements");
+		if (elements == null) throw new IllegalStateException("Door geometry model has no elements");
+		Vector3f min = new Vector3f(Float.POSITIVE_INFINITY);
+		Vector3f max = new Vector3f(Float.NEGATIVE_INFINITY);
+		for (var value : elements) {
+			JsonObject element = value.getAsJsonObject();
+			for (String key : List.of("from", "to")) {
+				JsonArray vector = element.getAsJsonArray(key);
+				Vector3f point = new Vector3f(
+					(float) number(vector, 0), (float) number(vector, 1), (float) number(vector, 2)
+				);
+				min.min(point);
+				max.max(point);
+			}
+		}
+		return min.add(max).mul(1.0f / 32.0f).sub(.5f, .5f, .5f);
+	}
+
+	private static Vector3f transformedPoint(ItemTransform transform, boolean leftHand, Vector3f point) {
+		float sign = leftHand ? -1 : 1;
+		return new Matrix4f().translate(
+			sign * transform.translation().x(), transform.translation().y(), transform.translation().z()
+		).rotateXYZ(
+			rad(transform.rotation().x()), sign * rad(transform.rotation().y()), sign * rad(transform.rotation().z())
+		).scale(transform.scale()).transformPosition(point, new Vector3f());
+	}
+
+	private static Matrix4f transformedOrientation(ItemTransform transform, boolean leftHand) {
+		float sign = leftHand ? -1 : 1;
+		return new Matrix4f().rotateXYZ(
+			rad(transform.rotation().x()), sign * rad(transform.rotation().y()), sign * rad(transform.rotation().z())
+		).scale(transform.scale());
+	}
+
+	private static void verifyThinBlockOffhand(String stem, ItemTransforms transforms) {
+		ItemTransform right = transforms.getTransform(ItemDisplayContext.FIRST_PERSON_RIGHT_HAND);
+		ItemTransform left = transforms.getTransform(ItemDisplayContext.FIRST_PERSON_LEFT_HAND);
+		Matrix4f expected = new Matrix4f().translate(
+			-right.translation().x(), right.translation().y(), right.translation().z()
+		).rotateY(rad(90)).rotateXYZ(
+			rad(right.rotation().x()), rad(right.rotation().y()), rad(right.rotation().z())
+		).scale(right.scale()).translate(-.5f, -.5f, -.5f);
+		assertMatrix(stem + " first-person left", expected, modern(left, true));
 	}
 
 	/** Compares the complete old and new renderer paths, including their different centering/scales. */
@@ -365,8 +493,15 @@ public final class ReportedIssueVerifier {
 	}
 
 	private static Matrix4f modern(ItemTransform transform) {
-		return new Matrix4f().translate(transform.translation()).rotateXYZ(
-			transform.rotation().x() * rad(1), transform.rotation().y() * rad(1), transform.rotation().z() * rad(1)
+		return modern(transform, false);
+	}
+
+	private static Matrix4f modern(ItemTransform transform, boolean leftHand) {
+		float sign = leftHand ? -1 : 1;
+		return new Matrix4f().translate(sign * transform.translation().x(), transform.translation().y(), transform.translation().z())
+			.rotateXYZ(
+			transform.rotation().x() * rad(1), sign * transform.rotation().y() * rad(1),
+			sign * transform.rotation().z() * rad(1)
 		).scale(transform.scale()).translate(-.5f, -.5f, -.5f);
 	}
 
