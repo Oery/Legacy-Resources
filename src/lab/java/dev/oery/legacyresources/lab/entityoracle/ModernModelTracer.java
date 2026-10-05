@@ -28,7 +28,7 @@ import org.joml.Vector4f;
 final class ModernModelTracer {
 	private ModernModelTracer() { }
 	static Trace capture(Scenario s) {
-		Trace trace=new Trace();trace.minecraftVersion="26.2";trace.jarSha1="candidate";trace.scenarioId=s.id();
+		Trace trace=new Trace();trace.minecraftVersion="26.3";trace.jarSha1="candidate";trace.scenarioId=s.id();
 		Model<?> model;LivingEntityRenderState state;int width=64,height=32;boolean pigSaddle=false;
 		String family=s.family();
 		if("ocelot".equals(family)||"cat".equals(family)){FelineRenderState f="cat".equals(family)?new net.minecraft.client.renderer.entity.state.CatRenderState():new FelineRenderState();common(s,f);String posture=s.string("posture");f.isCrouching="sneaking".equals(posture);f.isSprinting="sprinting".equals(posture);f.isSitting="sitting".equals(posture);state=f;model="cat".equals(family)?LegacyPilotModelLabAccess.cat():new LegacyOcelotModel(LegacyOcelotModel.createBodyLayer().bakeRoot());}

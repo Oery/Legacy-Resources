@@ -32,16 +32,12 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
 import javax.imageio.ImageIO;
-import net.minecraft.SharedConstants;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.PackLocationInfo;
 import net.minecraft.server.packs.PackResources;
 import net.minecraft.server.packs.PackType;
 import net.minecraft.server.packs.metadata.MetadataSectionType;
-import net.minecraft.server.packs.metadata.pack.PackFormat;
-import net.minecraft.server.packs.metadata.pack.PackMetadataSection;
 import net.minecraft.server.packs.resources.IoSupplier;
-import net.minecraft.util.InclusiveRange;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -872,15 +868,8 @@ public final class LegacyPackResources implements PackResources {
 	}
 
 	@Override
-	@SuppressWarnings("unchecked")
 	public <T> @Nullable T getMetadataSection(MetadataSectionType<T> metadataSerializer) throws IOException {
-		T value = delegate.getMetadataSection(metadataSerializer);
-		if (value instanceof PackMetadataSection section
-			&& (metadataSerializer == PackMetadataSection.CLIENT_TYPE || metadataSerializer == PackMetadataSection.FALLBACK_TYPE)) {
-			PackFormat current = SharedConstants.getCurrentVersion().packVersion(PackType.CLIENT_RESOURCES);
-			return (T) new PackMetadataSection(section.description(), new InclusiveRange<>(current));
-		}
-		return value;
+		return LegacyPackMetadata.currentFormat(metadataSerializer, delegate.getMetadataSection(metadataSerializer));
 	}
 
 	@Override

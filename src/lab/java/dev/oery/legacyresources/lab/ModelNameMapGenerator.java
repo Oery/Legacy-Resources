@@ -38,7 +38,7 @@ public final class ModelNameMapGenerator {
 	public static void main(String[] args) throws IOException {
 		Path project = Path.of(System.getProperty("lab.project", "."));
 		Path oldStates = project.resolve("reference/1.8.9/assets/assets/minecraft/blockstates");
-		Path newStates = project.resolve("reference/26.2/assets/assets/minecraft/blockstates");
+		Path newStates = project.resolve("reference/26.3/assets/assets/minecraft/blockstates");
 		Result result = derive(oldStates, newStates);
 		if (List.of(args).contains("--report")) {
 			printReport(result);
@@ -69,7 +69,7 @@ public final class ModelNameMapGenerator {
 
 	private static void printReport(Result result) {
 		System.out.println("# Vanilla model-alias derivation exceptions\n");
-		System.out.println("Generated from `reference/1.8.9` and `reference/26.2` by `./gradlew -PmodelMap.report generateModelNameMaps`. "
+		System.out.println("Generated from `reference/1.8.9` and `reference/26.3` by `./gradlew -PmodelMap.report generateModelNameMaps`. "
 			+ "These entries are deliberately excluded from `block_models.json`: they need a dedicated conversion or an explicit reviewed alias.\n");
 		System.out.println("## Legacy blockstates with no modern blockstate file\n");
 		for (Map.Entry<String, String> entry : result.unmatchedStates().entrySet()) {

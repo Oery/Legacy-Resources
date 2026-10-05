@@ -30,7 +30,7 @@ final class PackCorpus {
 	/** Where 1.8.9's own extracted {@code assets/} tree lives; see {@code reference/README.md}. */
 	private static final String VANILLA_LEGACY_ASSETS = "reference/1.8.9/assets";
 	/** Where the targeted modern version's extracted {@code assets/} tree lives. */
-	private static final String VANILLA_MODERN_ASSETS = "reference/26.2/assets";
+	private static final String VANILLA_MODERN_ASSETS = "reference/26.3/assets";
 
 	/** Identifier of the synthetic pack made from vanilla 1.8.9's own assets; see {@link #vanillaControl}. */
 	static final String CONTROL_ID = "__vanilla_1_8_9";
@@ -122,7 +122,7 @@ final class PackCorpus {
 	/**
 	 * Vanilla 1.8.9 itself, as a pack - the one input in the corpus whose correct output is known,
 	 * since the modern version ships the very texture the derivation is trying to invent. Deriving
-	 * from it and diffing against {@code reference/26.2} turns "does this look right" into a number.
+	 * from it and diffing against {@code reference/26.3} turns "does this look right" into a number.
 	 * <p>
 	 * Absent when {@code reference/} has not been regenerated (it is gitignored); the lab then simply
 	 * runs without a control.

@@ -7,7 +7,6 @@ import net.minecraft.client.renderer.entity.LivingEntityRenderer;
 import net.minecraft.client.renderer.entity.RenderLayerParent;
 import net.minecraft.client.renderer.entity.layers.RenderLayer;
 import net.minecraft.client.renderer.entity.state.HorseRenderState;
-import net.minecraft.client.renderer.feature.ModelFeatureRenderer;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.animal.equine.Markings;
@@ -29,6 +28,6 @@ final class ClassicHorseMarkingLayer extends RenderLayer<HorseRenderState, Class
 		Identifier texture = TEXTURES.get(state.markings);
 		if (texture == INVISIBLE || state.isInvisible) return;
 		collector.order(1).submitModel(getParentModel(), state, pose, RenderTypes.entityTranslucent(texture), light,
-			LivingEntityRenderer.getOverlayCoords(state, 0), state.outlineColor, (ModelFeatureRenderer.CrumblingOverlay)null);
+			LivingEntityRenderer.getOverlayCoords(state, 0), state.outlineColor);
 	}
 }

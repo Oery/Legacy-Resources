@@ -2,7 +2,7 @@ package dev.oery.legacyresources.client.convert;
 
 import dev.oery.legacyresources.LegacyResources;
 import java.io.IOException;
-import net.minecraft.server.packs.PackResources;
+import net.minecraft.server.packs.PackMetadataResources;
 import net.minecraft.server.packs.metadata.pack.PackMetadataSection;
 
 /**
@@ -17,7 +17,7 @@ final class LegacyPackDetector {
 	private LegacyPackDetector() {
 	}
 
-	static boolean isLegacy(PackResources resources) {
+	static boolean isLegacy(PackMetadataResources resources) {
 		try {
 			PackMetadataSection section = resources.getMetadataSection(PackMetadataSection.CLIENT_TYPE);
 			if (section == null) {

@@ -6,7 +6,6 @@ import net.minecraft.client.renderer.entity.LivingEntityRenderer;
 import net.minecraft.client.renderer.entity.RenderLayerParent;
 import net.minecraft.client.renderer.entity.layers.RenderLayer;
 import net.minecraft.client.renderer.entity.state.HorseRenderState;
-import net.minecraft.client.renderer.feature.ModelFeatureRenderer;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.ItemStack;
@@ -26,7 +25,7 @@ final class ClassicHorseArmorLayer extends RenderLayer<HorseRenderState, Classic
 		Identifier texture = texture(state.bodyArmorItem);
 		if (texture == null || state.isInvisible) return;
 		collector.order(2).submitModel(armorModel, state, pose, RenderTypes.entityCutout(texture), light,
-			LivingEntityRenderer.getOverlayCoords(state, 0), color(state.bodyArmorItem), null, state.outlineColor, (ModelFeatureRenderer.CrumblingOverlay)null);
+			LivingEntityRenderer.getOverlayCoords(state, 0), color(state.bodyArmorItem), null, state.outlineColor);
 	}
 
 	private static Identifier texture(ItemStack armor) {
