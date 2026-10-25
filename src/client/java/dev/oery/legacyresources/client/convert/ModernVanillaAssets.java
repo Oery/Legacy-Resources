@@ -95,6 +95,8 @@ final class ModernVanillaAssets {
 			return source;
 		}
 		Minecraft client = Minecraft.getInstance();
-		return client == null ? null : client.getVanillaPackResources();
+		// 26.3's VanillaPackResources is a holder rather than a pack: fullResources() is the merged
+		// view of every path it was built from, which is what 26.2's own VanillaPackResources was.
+		return client == null ? null : client.getVanillaPackResources().fullResources();
 	}
 }

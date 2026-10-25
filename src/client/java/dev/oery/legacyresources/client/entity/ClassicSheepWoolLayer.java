@@ -15,5 +15,5 @@ final class ClassicSheepWoolLayer extends RenderLayer<SheepRenderState, SheepMod
 	private final ClassicSheepFurModel adultModel=new ClassicSheepFurModel(ClassicSheepFurModel.createLayer().bakeRoot());
 	private final ClassicSheepFurModel babyModel=new ClassicSheepFurModel(ClassicSheepFurModel.createBabyLayer().bakeRoot());
 	ClassicSheepWoolLayer(RenderLayerParent<SheepRenderState, SheepModel> parent){super(parent);}
-	@Override public void submit(PoseStack pose,SubmitNodeCollector collector,int light,SheepRenderState state,float y,float x){if(!state.isSheared&&!state.isInvisible)collector.submitModel(state.isBaby?babyModel:adultModel,state,pose,RenderTypes.entityCutout(TEXTURE),light,LivingEntityRenderer.getOverlayCoords(state,0),LegacySheepColors.color(state),null,state.outlineColor,null);}
+	@Override public void submit(PoseStack pose,SubmitNodeCollector collector,int light,SheepRenderState state,float y,float x){if(!state.isSheared&&!state.isInvisible)collector.submitModel(state.isBaby?babyModel:adultModel,state,pose,RenderTypes.entityCutout(TEXTURE),light,LivingEntityRenderer.getOverlayCoords(state,0),LegacySheepColors.color(state),null,state.outlineColor);}
 }

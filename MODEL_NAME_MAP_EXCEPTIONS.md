@@ -1,6 +1,6 @@
 # Vanilla model-alias derivation exceptions
 
-Generated from `reference/1.8.9` and `reference/26.2` by `./gradlew -PmodelMap.report generateModelNameMaps`. These entries are deliberately excluded from `block_models.json`: they need a dedicated conversion or an explicit reviewed alias.
+Generated from `reference/1.8.9` and `reference/26.3` by `./gradlew -PmodelMap.report generateModelNameMaps`. These entries are deliberately excluded from `block_models.json`: they need a dedicated conversion or an explicit reviewed alias.
 
 ## Legacy blockstates with no modern blockstate file
 

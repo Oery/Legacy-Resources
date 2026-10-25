@@ -17,6 +17,6 @@ final class ClassicPigSaddleLayer extends RenderLayer<PigRenderState, PigModel> 
 	private final PigModel babyModel = new PigModel(ClassicPigModel.createBabyLayer(.5f).bakeRoot());
 	ClassicPigSaddleLayer(RenderLayerParent<PigRenderState, PigModel> parent) { super(parent); }
 	@Override public void submit(PoseStack poses, SubmitNodeCollector collector, int light, PigRenderState state, float yRot, float xRot) {
-		if (!state.saddle.isEmpty() && !state.isInvisible) collector.order(1).submitModel(state.isBaby ? babyModel : adultModel, state, poses, RenderTypes.entityCutout(TEXTURE), light, LivingEntityRenderer.getOverlayCoords(state, 0), -1, null, state.outlineColor, null);
+		if (!state.saddle.isEmpty() && !state.isInvisible) collector.order(1).submitModel(state.isBaby ? babyModel : adultModel, state, poses, RenderTypes.entityCutout(TEXTURE), light, LivingEntityRenderer.getOverlayCoords(state, 0), -1, null, state.outlineColor);
 	}
 }

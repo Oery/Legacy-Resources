@@ -53,7 +53,7 @@ final class HybridCatRenderer extends MobRenderer<Cat, CatRenderState, AbstractF
 		float lying = state.lieDownAmount;
 		if (lying > 0) {
 			poses.translate(.4f * lying, .15f * lying, .1f * lying);
-			poses.mulPose(Axis.ZP.rotationDegrees(Mth.rotLerp(lying, 0, 90)));
+			poses.rotateDegrees(Axis.ZP, Mth.rotLerp(lying, 0, 90));
 			if (state.isLyingOnTopOfSleepingPlayer) poses.translate(.15f * lying, 0, 0);
 		}
 	}
